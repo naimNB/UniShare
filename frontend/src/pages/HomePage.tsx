@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -11,7 +11,9 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { Category, Course, Resource } from '../types/api';
+import { useAsyncData } from '../hooks/useAsyncData';
+import { getLibraryShortcuts } from '../utils/shortcuts';
+import { MAX_SEARCH_LENGTH } from '../utils/queryParams';
 import { ResourceCard } from '../components/ResourceCard';
 import { CourseCard } from '../components/CourseCard';
 import { GridSkeleton } from '../components/LoadingSkeleton';
@@ -20,40 +22,22 @@ import { getSemesterOrdinal } from '../utils/formatters';
 
 export function HomePage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [recentResources, setRecentResources] = useState<Resource[]>([]);
-  const [totalResourcesCount, setTotalResourcesCount] = useState<number>(0);
   const [selectedSemester, setSelectedSemester] = useState<number>(5); // default semester 5 (DBMS & OS)
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const navigate = useNavigate();
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [coursesRes, categoriesRes, resourcesRes] = await Promise.all([
-        api.getCourses(),
-        api.getCategories(),
-        api.getResources({ limit: 6 }),
-      ]);
-
-      setCourses(coursesRes);
-      setCategories(categoriesRes);
-      setRecentResources(resourcesRes.items);
-      setTotalResourcesCount(resourcesRes.total);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load library catalog');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
+  const loadCatalog = useCallback(async (signal: AbortSignal) => {
+    const [courses, categories, resources] = await Promise.all([
+      api.getCourses(undefined, signal),
+      api.getCategories(signal),
+      api.getResources({ limit: 6 }, signal),
+    ]);
+    return { courses, categories, resources };
   }, []);
+  const { data, loading, error, reload: loadData } = useAsyncData('home', loadCatalog);
+  const courses = data?.courses || [];
+  const categories = data?.categories || [];
+  const recentResources = data?.resources.items || [];
+  const totalResourcesCount = data?.resources.total || 0;
+  const shortcuts = getLibraryShortcuts(courses, categories);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +87,8 @@ export function HomePage() {
               <Search className="absolute left-4 w-5 h-5 text-slate-400 pointer-events-none" />
               <input
                 type="search"
+                aria-label="Search resources and courses"
+                maxLength={MAX_SEARCH_LENGTH}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search courses, topics (e.g. Relational DBMS, Sockets, AVL Trees)..."
@@ -121,20 +107,14 @@ export function HomePage() {
           {/* Quick Search Tags */}
           <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
             <span className="font-medium text-slate-700">Quick Searches:</span>
-            {[
-              'Database Systems',
-              'Operating Systems',
-              'Web Engineering',
-              'Data Structures',
-              'Past Questions',
-            ].map((tag) => (
+            {shortcuts.map((shortcut) => (
               <button
-                key={tag}
+                key={shortcut.label}
                 type="button"
-                onClick={() => navigate(`/resources?q=${encodeURIComponent(tag)}`)}
+                onClick={() => navigate(shortcut.href)}
                 className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-transparent rounded-lg font-medium transition-colors"
               >
-                {tag}
+                {shortcut.label}
               </button>
             ))}
           </div>
@@ -146,7 +126,7 @@ export function HomePage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 grid grid-cols-2 lg:grid-cols-4 gap-6 text-center">
           <div className="space-y-1">
             <div className="text-3xl sm:text-4xl font-extrabold text-indigo-600">
-              {loading ? '...' : courses.length}
+              {loading ? '...' : error ? '—' : courses.length}
             </div>
             <div className="text-xs sm:text-sm font-semibold text-slate-800">
               Curated Courses
@@ -156,7 +136,7 @@ export function HomePage() {
 
           <div className="space-y-1 border-l border-slate-100">
             <div className="text-3xl sm:text-4xl font-extrabold text-indigo-600">
-              {loading ? '...' : totalResourcesCount}
+              {loading ? '...' : error ? '—' : totalResourcesCount}
             </div>
             <div className="text-xs sm:text-sm font-semibold text-slate-800">
               Verified Materials
@@ -166,7 +146,7 @@ export function HomePage() {
 
           <div className="space-y-1 border-l border-slate-100">
             <div className="text-3xl sm:text-4xl font-extrabold text-indigo-600">
-              {loading ? '...' : categories.length}
+              {loading ? '...' : error ? '—' : categories.length}
             </div>
             <div className="text-xs sm:text-sm font-semibold text-slate-800">
               Resource Categories
@@ -194,6 +174,7 @@ export function HomePage() {
         </div>
       )}
 
+      {!error && <>
       {/* Category Showcase Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
@@ -272,6 +253,7 @@ export function HomePage() {
               key={sem}
               type="button"
               onClick={() => setSelectedSemester(sem)}
+              aria-pressed={selectedSemester === sem}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold shrink-0 transition-all ${
                 selectedSemester === sem
                   ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-200'
@@ -328,6 +310,8 @@ export function HomePage() {
           </div>
         )}
       </section>
+
+      </>}
 
       {/* Zero Barrier Call to Action */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

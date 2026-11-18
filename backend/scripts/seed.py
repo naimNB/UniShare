@@ -6,11 +6,13 @@ and local file importing.
 """
 
 import argparse
+import logging
 import mimetypes
 import shutil
 import sys
 from pathlib import Path
 from typing import List, Optional
+from uuid import uuid4
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -18,13 +20,16 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from pypdf import PdfReader
 from backend.app.config import STORAGE_DIR
 from backend.app.database import SessionLocal, init_db
 from backend.app.models import Category, Course, Resource
 
 ALLOWED_EXTENSIONS = {".pdf", ".txt", ".docx", ".zip", ".md"}
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB limit
+logger = logging.getLogger(__name__)
 
 
 def generate_sample_pdf(path: Path, title: str, subtitle: str, lines: List[str]) -> int:
@@ -90,7 +95,7 @@ def generate_sample_pdf(path: Path, title: str, subtitle: str, lines: List[str])
 
 
 def validate_file(file_path: Path) -> str:
-    """Validate file existence, extension, MIME type, and size."""
+    """Validate size/type and parse PDFs instead of trusting their extension."""
     if not file_path.is_file():
         raise ValueError(f"File not found: {file_path}")
 
@@ -104,11 +109,45 @@ def validate_file(file_path: Path) -> str:
     if size > MAX_FILE_SIZE_BYTES:
         raise ValueError(f"File exceeds maximum size limit of {MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB.")
 
+    if ext == ".pdf":
+        try:
+            with file_path.open("rb") as document:
+                reader = PdfReader(document, strict=True)
+                if reader.is_encrypted:
+                    raise ValueError("Encrypted PDFs are not supported; import an unlocked copy.")
+                if not reader.pages:
+                    raise ValueError("The PDF must contain at least one page.")
+                # Resolve the page tree so broken page references are rejected too.
+                for page in reader.pages:
+                    if page.get("/Type") != "/Page":
+                        raise ValueError("The PDF contains an invalid page.")
+        except Exception as exc:
+            raise ValueError(f"Invalid or unsupported PDF '{file_path.name}': {exc}") from exc
+        return "application/pdf"
+
     mime_type, _ = mimetypes.guess_type(str(file_path))
     if not mime_type:
         mime_type = "application/pdf" if ext == ".pdf" else "application/octet-stream"
 
     return mime_type
+
+
+def remove_replaced_file(db: Session, previous_name: str, current_name: str) -> None:
+    """After commit, remove an old file only if no resource still references it."""
+    if previous_name == current_name:
+        return
+    try:
+        storage = STORAGE_DIR.resolve()
+        previous_path = (storage / previous_name).resolve()
+        previous_path.relative_to(storage)
+        references = db.execute(select(Resource.file_path)).scalars()
+        if any((storage / name).resolve() == previous_path for name in references):
+            return
+        previous_path.unlink(missing_ok=True)
+    except (OSError, ValueError, RuntimeError, SQLAlchemyError) as exc:
+        # The new record is committed. Failure to clean up an old file must not
+        # undo the import or remove the newly referenced file.
+        logger.warning("Could not clean up replaced resource file %r: %s", previous_name, exc)
 
 
 def seed_database(db: Session) -> None:
@@ -445,16 +484,22 @@ def import_local_file(
 ) -> Resource:
     """
     Developer-only utility to import an original local file into the platform.
-    Validates file format, copies to safe storage, and creates DB record.
+    The same trimmed title + course updates one record. New content is stored
+    separately and only replaces the old reference after a successful commit.
+    This function owns the transaction, including for a supplied session.
     """
+    title = title.strip()
+    if not title or len(title) > 255:
+        raise ValueError("Resource title must contain between 1 and 255 characters.")
     mime_type = validate_file(source_file)
-    file_size = source_file.stat().st_size
 
     owns_session = False
     if db is None:
         db = SessionLocal()
         owns_session = True
 
+    created_path = None
+    committed = False
     try:
         # Resolve course
         course = db.execute(select(Course).where(Course.code == course_code.strip())).scalar_one_or_none()
@@ -466,25 +511,31 @@ def import_local_file(
         if not category:
             raise ValueError(f"Category with name '{category_name}' does not exist.")
 
-        # Determine target filename safely
-        clean_ext = source_file.suffix.lower()
-        slug = "".join(c if c.isalnum() else "_" for c in title.lower()).strip("_")
-        target_name = f"{course.code.lower().replace(' ', '_')}_{slug}{clean_ext}"
-        target_path = STORAGE_DIR / target_name
-
-        STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_file, target_path)
-
-        # Check existing
+        # Resolve the existing record before creating any storage file.
         existing = db.execute(
             select(Resource).where(
                 Resource.course_id == course.id,
-                Resource.title == title.strip(),
+                Resource.title == title,
             )
         ).scalar_one_or_none()
+        previous_name = existing.file_path if existing else None
+
+        # Titles and user filenames never become storage paths. Exclusive creation
+        # protects existing bytes even in the extraordinarily unlikely UUID clash.
+        target_name = f"resource_{uuid4().hex}{source_file.suffix.lower()}"
+        target_path = STORAGE_DIR / target_name
+        STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        with target_path.open("xb") as destination:
+            created_path = target_path
+            with source_file.open("rb") as source:
+                shutil.copyfileobj(source, destination)
+        # Validate the stored snapshot as well: the source could change while copied.
+        mime_type = validate_file(target_path)
+        file_size = target_path.stat().st_size
 
         if existing:
             existing.description = description
+            existing.category_id = category.id
             existing.file_path = target_name
             existing.original_filename = source_file.name
             existing.mime_type = mime_type
@@ -492,7 +543,7 @@ def import_local_file(
             resource = existing
         else:
             resource = Resource(
-                title=title.strip(),
+                title=title,
                 description=description,
                 course_id=course.id,
                 category_id=category.id,
@@ -505,9 +556,24 @@ def import_local_file(
             db.add(resource)
 
         db.commit()
+        committed = True
+        # A refresh failure after commit must never delete the committed file.
         db.refresh(resource)
+        if previous_name:
+            remove_replaced_file(db, previous_name, target_name)
         print(f"✅ Imported '{title}' (ID {resource.id}) -> {target_path}")
         return resource
+    except Exception:
+        try:
+            db.rollback()
+        except SQLAlchemyError:
+            logger.exception("Could not roll back failed import transaction")
+        if not committed and created_path is not None:
+            try:
+                created_path.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Could not remove failed import file %s", created_path)
+        raise
     finally:
         if owns_session:
             db.close()

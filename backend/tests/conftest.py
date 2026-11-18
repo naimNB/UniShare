@@ -1,21 +1,29 @@
+import os
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-from backend.app.database import Base, get_db
-from backend.app.main import app
-from backend.app.models import Category, Course, Resource
-from backend.scripts.seed import generate_sample_pdf
+# Configuration creates storage on import. Keep even that bootstrap side effect
+# away from the developer's configured database and real uploaded documents.
+_bootstrap_dir = tempfile.TemporaryDirectory(prefix="unishare-test-bootstrap-")
+with patch.dict(os.environ, {
+    "DATABASE_URL": f"sqlite:///{_bootstrap_dir.name}/bootstrap.db",
+    "STORAGE_DIR": f"{_bootstrap_dir.name}/uploads",
+}):
+    from backend.app.database import Base, get_db
+    from backend.app.main import app
+    from backend.app.models import Category, Course, Resource
+    from backend.scripts.seed import generate_sample_pdf
 
 
-@pytest.fixture(scope="session")
-def test_env():
-    """Create a temporary directory for test storage and database."""
-    temp_dir = tempfile.TemporaryDirectory()
-    temp_path = Path(temp_dir.name)
+@pytest.fixture
+def test_env(tmp_path, monkeypatch):
+    """A fresh real SQLite database and storage directory for every test."""
+    temp_path = tmp_path
     test_storage = temp_path / "uploads"
     test_storage.mkdir(parents=True, exist_ok=True)
     db_file = temp_path / "test.db"
@@ -45,10 +53,14 @@ def test_env():
 
     # Patch config STORAGE_DIR for routers
     import backend.app.config as app_config
+    import backend.app.main as app_main
     import backend.app.routers.resources as res_router
-    orig_storage = app_config.STORAGE_DIR
-    app_config.STORAGE_DIR = test_storage
-    res_router.STORAGE_DIR = test_storage
+    import backend.scripts.seed as seed_script
+    monkeypatch.setattr(app_config, "STORAGE_DIR", test_storage)
+    monkeypatch.setattr(res_router, "STORAGE_DIR", test_storage)
+    monkeypatch.setattr(seed_script, "STORAGE_DIR", test_storage)
+    monkeypatch.setattr(seed_script, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(app_main, "init_db", lambda: Base.metadata.create_all(bind=engine))
 
     yield {
         "engine": engine,
@@ -57,15 +69,12 @@ def test_env():
     }
 
     # Teardown
-    app_config.STORAGE_DIR = orig_storage
-    res_router.STORAGE_DIR = orig_storage
-    Base.metadata.drop_all(bind=engine)
-    temp_dir.cleanup()
+    engine.dispose()
 
 
 @pytest.fixture
 def db_session(test_env):
-    """Provide a transactional database session for each test function."""
+    """Provide a session backed by this test's disposable database."""
     session = test_env["SessionLocal"]()
     try:
         yield session
@@ -83,12 +92,14 @@ def client(test_env, db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True)
 def seed_test_data(test_env):
     """Seed predictable fixtures for tests."""
     session = test_env["SessionLocal"]()

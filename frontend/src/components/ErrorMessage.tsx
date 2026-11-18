@@ -4,6 +4,7 @@ interface ErrorMessageProps {
   title?: string;
   message: string;
   onRetry?: () => void;
+  retryLabel?: string;
   className?: string;
 }
 
@@ -12,6 +13,7 @@ export function ErrorMessage({
   message,
   onRetry,
   className = '',
+  retryLabel = 'Try again',
 }: ErrorMessageProps) {
   return (
     <div
@@ -30,7 +32,7 @@ export function ErrorMessage({
               className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors focus:outline-hidden focus:ring-2 focus:ring-rose-500 focus:ring-offset-1"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Try again
+              {retryLabel}
             </button>
           )}
         </div>

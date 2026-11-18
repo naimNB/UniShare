@@ -1,32 +1,37 @@
-# React + TypeScript + Vite
+# UniShare frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 and TypeScript application built with Vite, Tailwind CSS v4, React Router, and Lucide React. The backend runs separately. Start with the [repository setup instructions](../README.md) to install and seed it.
 
-Currently, two official plugins are available:
+From this directory, using Node.js 24:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm ci
+npm run dev -- --host 127.0.0.1
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Open <http://127.0.0.1:5173>. The development server proxies `/api` to `http://127.0.0.1:8000`.
+
+## Structure
+
+- `src/pages/`: homepage, course/resource lists and details, and the not-found page.
+- `src/components/`: shared navigation, cards, PDF viewer, and loading/error/empty states.
+- `src/api/client.ts`: API requests and document URLs.
+- `src/types/api.ts`: shared API response types.
+- `src/utils/`: formatting and query helpers.
+
+## Checks
+
+```bash
+npm test
+npm run lint
+npx tsc -b
+npm run build
+```
+
+`npm test` uses Node 24’s built-in test runner and TypeScript support; it covers query parsing, API error messages, shortcut targets, and cancelled/stale requests without adding a test dependency. Browser workflows still need manual verification.
+
+The production build includes a TypeScript check and writes `dist/`. `npm run preview` serves that build for local inspection; verify that API requests reach the backend when using it. Production hosting must provide a fallback to `index.html` for client-side routes and route `/api` to FastAPI, or use `VITE_API_BASE_URL` with a permitted API origin.
+
+Set `VITE_API_BASE_URL` in `.env.local` only when the API uses a separate origin; its value is an origin such as `http://127.0.0.1:8000`, without `/api`. Vite embeds these values in client code, so they must not contain secrets.
+
+Manual checks should cover search/filter/reset, pagination, browser back/forward, slow or failed API requests, PDF preview/download, phone-width layouts, and keyboard navigation. Keep the existing visual design when contributing fixes.

@@ -39,7 +39,8 @@ def resolve_safe_file_path(relative_path: str) -> Path:
 @router.get("", response_model=PaginatedResources, summary="List and filter academic resources")
 def list_resources(
     q: Optional[str] = Query(
-        None, description="Search keyword across resource title and description"
+        None, max_length=200,
+        description="Search resource title/description and course code/name",
     ),
     semester: Optional[int] = Query(
         None, ge=1, le=12, description="Filter resources by course semester"
@@ -62,11 +63,17 @@ def list_resources(
     filters = []
 
     if q and q.strip():
-        search_term = f"%{q.strip()}%"
+        # Search literal text; '%' and '_' from user input are not wildcards.
+        keyword = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        search_term = f"%{keyword}%"
         filters.append(
             or_(
-                Resource.title.ilike(search_term),
-                Resource.description.ilike(search_term),
+                Resource.title.ilike(search_term, escape="\\"),
+                Resource.description.ilike(search_term, escape="\\"),
+                Resource.course.has(or_(
+                    Course.code.ilike(search_term, escape="\\"),
+                    Course.name.ilike(search_term, escape="\\"),
+                )),
             )
         )
 
@@ -168,9 +175,8 @@ def preview_resource(
     return FileResponse(
         path=str(file_path),
         media_type=resource.mime_type or "application/pdf",
-        headers={
-            "Content-Disposition": f'inline; filename="{resource.original_filename}"'
-        },
+        filename=resource.original_filename,
+        content_disposition_type="inline",
     )
 
 

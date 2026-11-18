@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   BookOpen,
@@ -12,7 +12,8 @@ import {
   Filter,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { CourseDetail } from '../types/api';
+import { useAsyncData } from '../hooks/useAsyncData';
+import { parsePositiveId } from '../utils/queryParams';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { EmptyState } from '../components/EmptyState';
 import { ListSkeleton } from '../components/LoadingSkeleton';
@@ -24,35 +25,12 @@ import {
 
 export function CourseDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [course, setCourse] = useState<CourseDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const courseId = id ? parseInt(id, 10) : 0;
-
-  const loadCourse = useCallback(async () => {
-    if (!courseId) {
-      setError('Invalid course ID');
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.getCourse(courseId);
-      setCourse(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load course details');
-    } finally {
-      setLoading(false);
-    }
-  }, [courseId]);
-
-  useEffect(() => {
-    loadCourse();
-  }, [loadCourse]);
-
+  const courseId = parsePositiveId(id);
+  const loadRequest = useCallback((signal: AbortSignal) => api.getCourse(courseId!, signal), [courseId]);
+  const { data: course, loading, error: requestError, reload: loadCourse } = useAsyncData(
+    id || '', loadRequest, courseId !== null,
+  );
+  const error = courseId === null ? 'Invalid course ID. Use a positive whole number.' : requestError;
 
   if (loading) {
     return (

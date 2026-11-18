@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ChevronRight,
@@ -12,7 +12,8 @@ import {
   Check,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { Resource } from '../types/api';
+import { useAsyncData } from '../hooks/useAsyncData';
+import { parsePositiveId } from '../utils/queryParams';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { PdfViewer } from '../components/PdfViewer';
 import {
@@ -24,35 +25,13 @@ import {
 
 export function ResourceDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [resource, setResource] = useState<Resource | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const resourceId = parsePositiveId(id);
+  const loadRequest = useCallback((signal: AbortSignal) => api.getResource(resourceId!, signal), [resourceId]);
+  const { data: resource, loading, error: requestError, reload: loadResource } = useAsyncData(
+    id || '', loadRequest, resourceId !== null,
+  );
+  const error = resourceId === null ? 'Invalid resource ID. Use a positive whole number.' : requestError;
   const [copiedLink, setCopiedLink] = useState(false);
-
-  const resourceId = id ? parseInt(id, 10) : 0;
-
-  const loadResource = useCallback(async () => {
-    if (!resourceId) {
-      setError('Invalid resource ID');
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.getResource(resourceId);
-      setResource(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load resource details');
-    } finally {
-      setLoading(false);
-    }
-  }, [resourceId]);
-
-  useEffect(() => {
-    loadResource();
-  }, [loadResource]);
 
   const handleShare = () => {
     if (navigator.clipboard) {
@@ -76,7 +55,7 @@ export function ResourceDetailPage() {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16">
         <ErrorMessage
-          title="Resource Not Found"
+          title="Could not load resource"
           message={error || 'The requested resource could not be found or has been moved.'}
           onRetry={loadResource}
         />

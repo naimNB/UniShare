@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BookOpen, Search, Filter, X } from 'lucide-react';
 import { api } from '../api/client';
-import type { Course } from '../types/api';
+import { useAsyncData } from '../hooks/useAsyncData';
+import { parseCourseParams } from '../utils/queryParams';
 import { CourseCard } from '../components/CourseCard';
 import { GridSkeleton } from '../components/LoadingSkeleton';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -11,32 +12,14 @@ import { getSemesterOrdinal } from '../utils/formatters';
 
 export function CoursesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
-
-  // Selected semester from URL query or null for all
-  const semesterParam = searchParams.get('semester');
-  const selectedSemester = semesterParam ? parseInt(semesterParam, 10) : null;
-
-  const loadCourses = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Fetch all courses or filtered by semester
-      const data = await api.getCourses(selectedSemester || undefined);
-      setCourses(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load courses');
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedSemester]);
-
-  useEffect(() => {
-    loadCourses();
-  }, [loadCourses]);
+  const { semester, error: queryError } = parseCourseParams(searchParams);
+  const selectedSemester = semester ?? null;
+  const loadCoursesRequest = useCallback((signal: AbortSignal) => api.getCourses(semester, signal), [semester]);
+  const { data, loading, error, reload: loadCourses } = useAsyncData(
+    searchParams.toString(), loadCoursesRequest, !queryError,
+  );
+  const courses = useMemo(() => data || [], [data]);
 
   const handleSemesterSelect = (sem: number | null) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -51,7 +34,7 @@ export function CoursesPage() {
   // Filter in-memory by course code / name search
   const filteredCourses = useMemo(() => {
     if (!filterQuery.trim()) return courses;
-    const q = filterQuery.toLowerCase();
+    const q = filterQuery.trim().toLowerCase();
     return courses.filter(
       (c) =>
         c.code.toLowerCase().includes(q) ||
@@ -83,6 +66,7 @@ export function CoursesPage() {
           <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
           <input
             type="search"
+            aria-label="Filter courses by code or name"
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             placeholder="Filter courses by code (e.g. CSE 3101) or title (e.g. Operating Systems)..."
@@ -110,6 +94,7 @@ export function CoursesPage() {
           <button
             type="button"
             onClick={() => handleSemesterSelect(null)}
+            aria-pressed={selectedSemester === null}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
               selectedSemester === null
                 ? 'bg-indigo-600 text-white shadow-2xs'
@@ -119,11 +104,12 @@ export function CoursesPage() {
             All Semesters
           </button>
 
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+          {Array.from({ length: Math.max(8, selectedSemester || 0) }, (_, index) => index + 1).map((sem) => (
             <button
               key={sem}
               type="button"
               onClick={() => handleSemesterSelect(sem)}
+              aria-pressed={selectedSemester === sem}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
                 selectedSemester === sem
                   ? 'bg-indigo-600 text-white shadow-2xs'
@@ -137,10 +123,12 @@ export function CoursesPage() {
       </div>
 
       {/* Courses List */}
-      {error && <ErrorMessage message={error} onRetry={loadCourses} />}
-
-      {loading ? (
+      {queryError ? (
+        <ErrorMessage title="Invalid course URL" message={queryError} onRetry={() => handleSemesterSelect(null)} retryLabel="Clear semester filter" />
+      ) : loading ? (
         <GridSkeleton count={6} />
+      ) : error ? (
+        <ErrorMessage message={error} onRetry={loadCourses} />
       ) : filteredCourses.length > 0 ? (
         <div>
           <div className="flex items-center justify-between mb-4 text-xs font-medium text-slate-500">

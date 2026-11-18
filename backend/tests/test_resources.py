@@ -1,3 +1,11 @@
+from urllib.parse import quote
+
+import pytest
+from sqlalchemy import select
+
+from backend.app.models import Resource
+
+
 def test_list_resources(client):
     """Verify listing resources with default pagination and structure."""
     response = client.get("/api/resources")
@@ -186,3 +194,73 @@ def test_path_traversal_protection(client, db_session, test_env):
     assert down_res.status_code == 400
     assert "security violation" in down_res.json()["detail"].lower()
 
+
+@pytest.mark.parametrize("filename", [
+    "বাংলা নোট.pdf",
+    'lecture; "final".pdf',
+    "résumé & exercises.pdf",
+    "line\r\nbreak.pdf",
+])
+@pytest.mark.parametrize("action,disposition", [("preview", "inline"), ("download", "attachment")])
+def test_unicode_and_special_filenames(client, db_session, filename, action, disposition):
+    resource = db_session.scalar(select(Resource).order_by(Resource.id))
+    resource.original_filename = filename
+    db_session.commit()
+
+    response = client.get(f"/api/resources/{resource.id}/{action}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF-")
+    header = response.headers["content-disposition"]
+    assert header == f"{disposition}; filename*=utf-8''{quote(filename)}"
+    assert "\r" not in header and "\n" not in header
+
+
+@pytest.mark.parametrize("keyword", ["CSE 3101", "cse 3101", "Database Management Systems", "Management"])
+def test_search_includes_course_code_and_name(client, keyword):
+    response = client.get("/api/resources", params={"q": keyword})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["course"]["code"] == "CSE 3101"
+
+
+def test_course_search_combines_with_filters_and_pagination(client):
+    matching = client.get("/api/resources", params={"q": "CSE 3101", "semester": 5, "limit": 1})
+    assert matching.status_code == 200
+    assert matching.json()["total"] == 1
+    empty_page = client.get("/api/resources", params={"q": "CSE 3101", "semester": 5, "offset": 1})
+    assert empty_page.json()["total"] == 1
+    assert empty_page.json()["items"] == []
+    excluded = client.get("/api/resources", params={"q": "CSE 3101", "semester": 7})
+    assert excluded.json()["total"] == 0
+
+
+@pytest.mark.parametrize("keyword", ["%", "_"])
+def test_search_treats_sql_wildcards_as_literal_text(client, keyword):
+    response = client.get("/api/resources", params={"q": keyword})
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
+
+
+@pytest.mark.parametrize("parameters", [
+    {"offset": "bad"}, {"offset": -1}, {"offset": "1.5"},
+    {"limit": 0}, {"limit": 101}, {"semester": 0}, {"semester": 13},
+    {"course_id": -1}, {"category_id": "bad"}, {"q": "x" * 201},
+])
+def test_invalid_resource_filters_rejected(client, parameters):
+    response = client.get("/api/resources", params=parameters)
+    assert response.status_code == 422
+    assert isinstance(response.json()["detail"], list)
+
+
+@pytest.mark.parametrize("action", ["preview", "download"])
+def test_missing_stored_file_returns_404(client, db_session, test_env, action):
+    resource = db_session.scalar(select(Resource).order_by(Resource.id))
+    downloads_before = resource.download_count
+    (test_env["storage_dir"] / resource.file_path).unlink()
+    response = client.get(f"/api/resources/{resource.id}/{action}")
+    assert response.status_code == 404
+    db_session.refresh(resource)
+    assert resource.download_count == downloads_before

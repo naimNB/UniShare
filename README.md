@@ -1,208 +1,181 @@
-# UniShare – University Resource Sharing Platform
+# UniShare — University Resource Sharing Platform
 
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0+-D71F00.svg)](https://www.sqlalchemy.org/)
-[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v3-38B2AC.svg?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Tests](https://img.shields.io/badge/Tests-19%20Passed-brightgreen.svg)]()
+UniShare is a university Web Engineering project for finding and downloading academic resources. Visitors can browse without an account. Content is managed by a developer using a local command-line tool; there is no login, registration, administrator dashboard, or public content-editing API.
 
-**UniShare** is an academic resource-sharing platform engineered according to the official Entity-Relationship (ER) specification. It enables university students to discover, search, filter, and download course documents (lecture notes, slide decks, midterm/final questions, assignments, and lab manuals), while providing authorized administrators with a dashboard to curate academic materials.
+## Features and architecture
 
----
+- Semester-wise course browsing and course details.
+- Resource search by title, description, course code, or course name; combined course, semester, and category filters.
+- Paginated resource listings, resource details, inline PDF preview, and downloads.
+- Responsive React interface with loading, empty, error, and not-found states.
+- Local SQLite metadata and document storage; developer-only seed/import commands.
 
-## 🏛️ System Architecture & ER Specification
+| Layer | Implementation |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, React Router, Lucide React |
+| Backend | FastAPI, SQLAlchemy 2.x, Pydantic v2 |
+| Data | SQLite with foreign keys enabled; files stored outside the frontend bundle |
+| Checks | Pytest, Node test runner, Oxlint, TypeScript, Vite production build |
 
-The relational architecture models four core entities with strict referential integrity:
+The frontend requests JSON from `/api`. During development, Vite proxies those requests to FastAPI at `http://127.0.0.1:8000`. FastAPI serves API responses and documents; it does not serve the React application.
 
-![UniShare ER Diagram](docs/er_diagram.jpeg)
+```text
+UniShare/
+├── backend/
+│   ├── app/                  # Configuration, database, models, schemas, routers
+│   ├── scripts/seed.py       # Local demo seeding and document imports
+│   ├── tests/                # Backend regression and API tests
+│   ├── storage/uploads/      # Local documents (ignored except .gitkeep)
+│   └── requirements.txt
+├── frontend/
+│   ├── src/                  # Pages, components, API client, shared types
+│   ├── package.json
+│   └── package-lock.json
+└── docs/                     # Current schema diagram and retained legacy image
+```
 
-### Entity-Relationship Mapping
+## Database design
 
-| Entity | Primary Key | Key Attributes | Relationships |
-| :--- | :--- | :--- | :--- |
-| **`ADMIN`** | `admin_id` | `name`, `email` *(Unique)*, `password` *(Bcrypt)*, `created_at` | `1` Admin uploads `N` Resources |
-| **`COURSE`** | `course_id` | `course_name`, `course_code` *(Unique)*, `semester` | `1` Course has `N` Resources |
-| **`CATEGORY`** | `category_id` | `category_name` *(Unique)* (Notes, Slides, etc.) | `1` Category contains `N` Resources |
-| **`RESOURCE`** | `resource_id` | `title`, `description`, `file_path`, `file_name`, `upload_date`, `course_id` *(FK)*, `category_id` *(FK)*, `admin_id` *(FK)* | Belongs to Course, Category & Admin |
+![Current Course, Category, and Resource relationships](docs/er-diagram.svg)
 
-### Cardinality Summary
-- **Admin uploads Resources**: `1 : N` (One admin uploads many resources)
-- **Course belongs to Resources**: `1 : N` (One course contains many resources)
-- **Category contains Resources**: `1 : N` (One category classifies many resources)
+Every resource belongs to one course and one category. Course codes and category names are unique. Resource metadata includes the original filename, internal storage path, MIME type, size, creation time, and a download-request counter. Public resource responses omit the internal file path.
 
----
+See [the diagram source and schema notes](docs/er-diagram.md). The earlier `docs/er_diagram.jpeg` is preserved as a legacy design artifact; it does not describe the implemented schema.
 
-## ✨ Features
+## Local setup
 
-### 🎓 For Students & Visitors (Public Access)
-- **Browse Resources**: View all uploaded academic resources with courses, categories, semesters, and upload metadata.
-- **Instant Search**: Real-time keyword search across resource titles, descriptions, course codes, and course names.
-- **Multi-Facet Filtering**: Filter dynamically by category (Notes, Slides, Previous Questions, Assignments, Lab Resources) and course.
-- **Resource Details**: Detailed preview card with full syllabus description, uploader information, file type, and exact file size.
-- **Direct File Downloads**: Secure download endpoint serving PDFs, documents, slide decks, and code archives.
+Run backend commands from the **repository root**, using a Python environment dedicated to this checkout.
 
-### 🛡️ For Administrators (Authenticated Access)
-- **Secure Authentication**: JWT token-based authentication with bcrypt password hashing.
-- **Resource Management**:
-  - Upload new resources with multi-part file uploads and metadata.
-  - Update resource descriptions, titles, course associations, and replace uploaded files.
-  - Delete resources with automatic physical file cleanup.
-- **Course Management**: Add and manage university courses (`course_name`, `course_code`, `semester`).
-- **Category Management**: Add and maintain academic resource categories.
+Prerequisites:
 
----
+- Python 3.12 with `venv` and `pip` available. The clean-install verification used Python 3.12.16.
+- Node.js 24 and npm. The clean-install verification used Node.js 24.21.0.
+- Git and two terminal windows.
 
-## 🛠️ Tech Stack
-
-- **Backend Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Asynchronous Python Web Framework)
-- **ORM & Database**: [SQLAlchemy 2.0](https://www.sqlalchemy.org/) with SQLite (local development) / PostgreSQL support
-- **Data Validation**: [Pydantic V2](https://docs.pydantic.dev/)
-- **Security**: OAuth2 with JWT tokens ([python-jose](https://github.com/mpdavis/python-jose)) & [bcrypt](https://pypi.org/project/bcrypt/)
-- **Frontend**: Responsive Single-Page Application (SPA) built with Tailwind CSS, FontAwesome 6, and Vanilla JavaScript
-- **Testing**: [Pytest](https://docs.pytest.org/) & [HTTPX](https://www.python-httpx.org/) (19 integration tests)
-
----
-
-## 🚀 Getting Started
-
-### 1. Prerequisites
-- Python 3.10+ (or Conda environment)
-- `pip` package manager
-
-### 2. Installation
-
-Clone the repository and install dependencies:
 ```bash
 git clone https://github.com/naimNB/UniShare.git
 cd UniShare
-
-# Install dependencies
-pip install -r requirements.txt
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r backend/requirements.txt
 ```
 
-### 3. Run the Application
+If your Python installation lacks `ensurepip`, install your distribution's Python venv/pip support, or use an already available `uv` installation:
 
-Start the development server using the startup script:
 ```bash
-./run.sh
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r backend/requirements.txt
+source .venv/bin/activate
 ```
 
-Or manually using Uvicorn:
+On Windows, activate with `.venv\Scripts\Activate.ps1` in PowerShell instead. The remaining Python commands are the same.
+
+### Seed a fresh demonstration database
+
 ```bash
-uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+python -m backend.scripts.seed seed
 ```
 
-Open your browser at:
-- **Web App**: [http://127.0.0.1:8000](http://127.0.0.1:8000)
-- **Interactive API Documentation (Swagger UI)**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **Alternative API Docs (ReDoc)**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+A fresh database receives 16 courses, 5 categories, and 12 resources with generated sample PDFs. These are **demonstration documents**, and their initial download counts are sample values. They are not verified official university materials.
 
----
+Seeding is explicit: starting the API creates missing tables but does not add demo content. Repeating the seed does not duplicate the demo records, but it regenerates demo files and updates matching demo-resource metadata. Use it on a disposable demo database, not as an update tool for a curated library. Do not use `--reset` on data you want to keep; it drops database tables.
 
-## 🔑 Default Credentials
+### Start the backend — terminal 1
 
-The database automatically initializes and pre-seeds default courses, categories, and an administrator account on first run:
-
-| Role | Email | Password |
-| :--- | :--- | :--- |
-| **System Admin** | `admin@unishare.com` | `admin123` |
-
----
-
-## 📡 REST API Reference
-
-### 🔐 Authentication (`/api/auth`)
-| Method | Endpoint | Description | Auth Required |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/login` | Authenticate Admin and receive JWT token | No |
-| `POST` | `/api/auth/register` | Register a new administrator account | No |
-| `GET` | `/api/auth/me` | Fetch currently logged-in Admin profile | Yes (Bearer) |
-
-### 📚 Academic Resources (`/api/resources`)
-| Method | Endpoint | Description | Auth Required |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/resources` | List, search, and filter academic resources | No |
-| `GET` | `/api/resources/{id}` | Retrieve details of a specific resource | No |
-| `GET` | `/api/resources/{id}/download`| Download the uploaded resource file | No |
-| `POST` | `/api/resources` | Upload a new resource file and metadata | Yes (Bearer) |
-| `PUT` | `/api/resources/{id}` | Update resource details / replace file | Yes (Bearer) |
-| `DELETE`| `/api/resources/{id}` | Delete a resource and its storage file | Yes (Bearer) |
-
-### 📖 Courses (`/api/courses`)
-| Method | Endpoint | Description | Auth Required |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/courses` | List all university courses with resource counts | No |
-| `GET` | `/api/courses/{id}` | Retrieve single course information | No |
-| `POST` | `/api/courses` | Add a new course | Yes (Bearer) |
-| `PUT` | `/api/courses/{id}` | Update existing course details | Yes (Bearer) |
-| `DELETE`| `/api/courses/{id}` | Delete a course | Yes (Bearer) |
-
-### 🏷️ Categories (`/api/categories`)
-| Method | Endpoint | Description | Auth Required |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/categories` | List all academic categories with resource counts | No |
-| `GET` | `/api/categories/{id}` | Retrieve single category information | No |
-| `POST` | `/api/categories` | Add a new category | Yes (Bearer) |
-| `PUT` | `/api/categories/{id}` | Update existing category | Yes (Bearer) |
-| `DELETE`| `/api/categories/{id}` | Delete a category | Yes (Bearer) |
-
----
-
-## 🧪 Running Automated Tests
-
-Run the complete test suite with pytest:
 ```bash
-pytest tests/ -v
+source .venv/bin/activate
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-All 19 tests verify database models, foreign key relationships, JWT authentication, search filters, file uploads, and downloads.
+- API health: <http://127.0.0.1:8000/api/health>
+- Interactive API documentation: <http://127.0.0.1:8000/docs>
 
----
+### Start the frontend — terminal 2
 
-## 📂 Project Structure
+From the repository root:
 
-```
-UniShare/
-├── app/
-│   ├── __init__.py
-│   ├── config.py             # Environment settings & JWT configuration
-│   ├── database.py           # SQLAlchemy engine & session dependency
-│   ├── models/               # SQLAlchemy ORM Models (matching ER diagram)
-│   │   ├── admin.py
-│   │   ├── course.py
-│   │   ├── category.py
-│   │   └── resource.py
-│   ├── schemas/              # Pydantic v2 schemas for request/response validation
-│   │   ├── admin.py
-│   │   ├── course.py
-│   │   ├── category.py
-│   │   └── resource.py
-│   ├── services/
-│   │   ├── auth.py           # Bcrypt password hashing & JWT token verification
-│   │   └── seeder.py         # Initial database seeder for admin, courses & categories
-│   └── routers/              # FastAPI API Routers
-│       ├── auth.py
-│       ├── courses.py
-│       ├── categories.py
-│       └── resources.py
-├── docs/
-│   └── er_diagram.jpeg       # Official ER Diagram specification
-├── static/
-│   └── index.html            # Complete responsive Tailwind CSS web application
-├── tests/                    # Integration test suite
-│   ├── conftest.py
-│   ├── test_auth.py
-│   ├── test_courses_categories.py
-│   └── test_resources.py
-├── uploads/                  # Secure file storage directory for resource documents
-├── main.py                   # FastAPI application entrypoint & static mounting
-├── requirements.txt          # Python dependencies
-├── run.sh                    # Single-command startup script
-└── README.md                 # Project documentation
+```bash
+cd frontend
+npm ci
+npm run dev -- --host 127.0.0.1
 ```
 
----
+Open <http://127.0.0.1:5173>. Keep both servers running. `npm ci` uses the committed lockfile; do not apply forceful dependency audit fixes without reviewing compatibility.
 
-## 📄 License
+## Configuration and data safety
 
-This project is developed for educational and academic resource sharing.
+| Setting | Default | Use |
+| --- | --- | --- |
+| `DATABASE_PATH` | `backend/unishare.db` | SQLite file path; use an absolute path when overriding |
+| `DATABASE_URL` | SQLite URL built from `DATABASE_PATH` | Overrides `DATABASE_PATH` if set; SQLite is the tested database |
+| `STORAGE_DIR` | `backend/storage/uploads` | Document directory; use an absolute path when overriding |
+| `VITE_API_BASE_URL` | Empty | Optional API origin, e.g. `http://127.0.0.1:8000`; do not append `/api` |
+
+Set backend environment variables **before** running the CLI or API. The backend reads process environment variables; it does not load a `.env` file automatically. Vite can read `VITE_API_BASE_URL` from `frontend/.env.local`; restart Vite after changing it. Frontend environment values are public and must not contain secrets.
+
+For a separate demo library, set `DATABASE_PATH` and `STORAGE_DIR` to new locations in every backend/CLI terminal, and ensure `DATABASE_URL` is not overriding them. Back up the database and storage directory together before modifying an existing library. Neither is committed to Git.
+
+The project is configured for local development. Its CORS allowlist contains localhost/127.0.0.1 on ports 5173 and 3000. A deployed frontend needs SPA route fallback to `index.html` and either a same-origin `/api` reverse proxy or an explicitly configured API origin/CORS policy. The Vite development proxy is not part of the production bundle. `npm run preview` is a local build check, not a production server.
+
+## Developer-only document imports
+
+The course and category must already exist. Example, from the repository root with the backend environment activated:
+
+```bash
+python -m backend.scripts.seed import-file \
+  --file "/absolute/path/Normalization.pdf" \
+  --course "CSE 3101" \
+  --category "Lecture Notes" \
+  --title "Normalization study notes" \
+  --description "Notes on functional dependencies and normal forms."
+```
+
+The importer preserves the source basename in metadata while using a collision-resistant storage name. Re-importing the same trimmed title into the same course updates that resource, including its category and file; a different title or course creates a separate record. The new file is validated before the database commit. On validation or database failure before a successful commit, the new file is removed and the previous resource remains intact. A process interruption can leave an unreferenced file; the filesystem and database do not share a transaction. A post-commit refresh failure is reported without deleting the committed file. After a successful replacement, the old file is removed only if it is safely inside storage and no resource still references it. Run imports sequentially: this local tool is not a concurrent upload service.
+
+Allowed extensions are `.pdf`, `.txt`, `.docx`, `.zip`, and `.md`, with a 50 MiB maximum. PDF imports undergo structural validation with pypdf; malformed, encrypted, and zero-page PDFs are rejected. Other formats are checked for extension and size. PDF validation is not malware scanning. Import only material you trust and have permission to share. The PDF viewer is intended for PDFs; browser handling of other formats varies.
+
+There is no general-purpose course/category editor or resource-deletion CLI. Do not remove stored files manually while resource records still reference them.
+
+## Public API
+
+All content endpoints below use `GET` and require no credentials. There are no public upload, update, or delete endpoints. Downloads increment a metadata counter, so “read-only” describes content management, not every database operation.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `/api/health` | API process status |
+| `/api/courses` | Courses and resource counts; optional `semester` |
+| `/api/courses/{id}` | Course details and associated resources |
+| `/api/categories` | Categories and resource counts |
+| `/api/resources` | Search/filter/paginate resources |
+| `/api/resources/{id}` | Resource details |
+| `/api/resources/{id}/preview` | Inline document response |
+| `/api/resources/{id}/download` | Attachment response; counts download initiation |
+
+Resource-list parameters: `q` (up to 200 characters), `semester` (1–12), `course_id` and `category_id` (positive integers), `limit` (1–100; default 20), and `offset` (nonnegative integer; default 0). Filters combine. Search matches resource titles/descriptions and course codes/names. Results are ordered by creation time descending, then ID descending, and returned as `{ items, total, limit, offset }`.
+
+The sample courses cover semesters 1–8. A missing resource/course returns 404; invalid API query parameters return 422. The download count records initiated responses, not unique users or completed downloads.
+
+## Verification
+
+From the repository root with the backend environment activated:
+
+```bash
+python -m pytest backend/tests -q
+```
+
+From `frontend/`:
+
+```bash
+npm test
+npm run lint
+npx tsc -b
+npm run build
+```
+
+`npm test` runs dependency-free regression tests for query validation, error formatting, shortcuts, and request cancellation using Node 24. These are utility tests, not a full browser automation suite. `npm run build` also runs the TypeScript build check. Generated assets are written to `frontend/dist`. See [frontend notes](frontend/README.md) for frontend-specific checks. Avoid treating a successful build as proof of browser behavior.
+
+Before the demonstration, rehearse course navigation, combined filters, a query using a course code, resource details, a Bengali-named PDF preview/download, empty results, and an API outage. Check phone-width and keyboard navigation in the actual presentation browser. With only 12 seed resources, import an additional trusted sample if demonstrating multi-page navigation.
+
+## Team contributions
+
+Small follow-up contributions can include keyboard/accessibility checks, permitted academic sample documents with attribution, additional filter/count tests, a clean-machine setup walkthrough, and the project report/demo script. Each contribution should have a focused pull request and a teammate who can explain and demonstrate it.

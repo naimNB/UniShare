@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="740" viewBox="0 0 1160 740" role="img" aria-labelledby="title desc">
+  <title id="title">UniShare implemented database schema</title>
+  <desc id="desc">Course and Category each have zero or many Resources. Every Resource requires one Course and one Category. There is no user or administrator entity.</desc>
+  <defs>
+    <style>
+      .heading{font:700 28px system-ui,sans-serif;fill:#0f172a}
+      .sub{font:16px system-ui,sans-serif;fill:#475569}
+      .table{fill:white;stroke:#cbd5e1;stroke-width:2}
+      .band{fill:#1e40af}
+      .name{font:700 20px system-ui,sans-serif;fill:white}
+      .field{font:16px ui-monospace,monospace;fill:#0f172a}
+      .note{font:14px system-ui,sans-serif;fill:#475569}
+      .relation{stroke:#1d4ed8;stroke-width:2.5;fill:none}
+      .label{font:600 15px system-ui,sans-serif;fill:#1e40af}
+    </style>
+  </defs>
+  <rect width="1160" height="740" fill="#f8fafc"/>
+  <text x="32" y="46" class="heading">UniShare · implemented database schema</text>
+  <text x="32" y="76" class="sub">Course · Category · Resource — public browsing with local content management</text>
+
+  <rect x="32" y="114" width="370" height="252" rx="10" class="table"/>
+  <path d="M42 114H392Q402 114 402 124V164H32V124Q32 114 42 114" class="band"/>
+  <text x="52" y="146" class="name">COURSE</text>
+  <text x="52" y="194" class="field">id              integer  PK</text>
+  <text x="52" y="226" class="field">code            string   UK</text>
+  <text x="52" y="258" class="field">name            string</text>
+  <text x="52" y="290" class="field">semester        integer</text>
+  <text x="52" y="322" class="field">description     text     ?</text>
+
+  <rect x="32" y="414" width="370" height="188" rx="10" class="table"/>
+  <path d="M42 414H392Q402 414 402 424V464H32V424Q32 414 42 414" class="band"/>
+  <text x="52" y="446" class="name">CATEGORY</text>
+  <text x="52" y="494" class="field">id              integer  PK</text>
+  <text x="52" y="526" class="field">name            string   UK</text>
+  <text x="52" y="558" class="field">description     text     ?</text>
+
+  <rect x="640" y="114" width="488" height="488" rx="10" class="table"/>
+  <path d="M650 114H1118Q1128 114 1128 124V164H640V124Q640 114 650 114" class="band"/>
+  <text x="660" y="146" class="name">RESOURCE</text>
+  <text x="660" y="194" class="field">id                   integer   PK</text>
+  <text x="660" y="226" class="field">title                string</text>
+  <text x="660" y="258" class="field">description          text      ?</text>
+  <text x="660" y="290" class="field">course_id            integer   FK</text>
+  <text x="660" y="322" class="field">category_id          integer   FK</text>
+  <text x="660" y="354" class="field">file_path            string</text>
+  <text x="660" y="386" class="field">original_filename    string</text>
+  <text x="660" y="418" class="field">mime_type            string</text>
+  <text x="660" y="450" class="field">file_size            integer   ?</text>
+  <text x="660" y="482" class="field">created_at           datetime</text>
+  <text x="660" y="514" class="field">download_count       integer</text>
+  <text x="660" y="566" class="note">Each resource has one required course and category.</text>
+
+  <path d="M402 244H640" class="relation"/>
+  <path d="M416 234V254M422 234V254M624 244L640 234M624 244L640 254" class="relation"/>
+  <circle cx="613" cy="244" r="5" fill="#f8fafc" stroke="#1d4ed8" stroke-width="2"/>
+  <text x="472" y="226" class="label">contains</text>
+  <text x="457" y="271" class="note">one → zero or many</text>
+
+  <path d="M402 506H640" class="relation"/>
+  <path d="M416 496V516M422 496V516M624 506L640 496M624 506L640 516" class="relation"/>
+  <circle cx="613" cy="506" r="5" fill="#f8fafc" stroke="#1d4ed8" stroke-width="2"/>
+  <text x="471" y="488" class="label">classifies</text>
+  <text x="457" y="533" class="note">one → zero or many</text>
+
+  <text x="32" y="652" class="note">PK: primary key     FK: foreign key     UK: unique key     ?: nullable     file_size is measured in bytes</text>
+  <text x="32" y="680" class="note">Resource counts are calculated. The internal file path is omitted from public API responses.</text>
+  <text x="32" y="708" class="note">Source: backend/app/models.py · Relationship deletion-policy details: docs/er-diagram.md</text>
+</svg>

@@ -7,6 +7,7 @@ import type {
   Resource,
   ResourceQueryParams,
 } from '../types/api';
+import { formatApiError } from '../utils/apiErrors';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
@@ -38,7 +39,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
       let errorDetail: string | undefined;
       try {
         const errorJson = await response.json();
-        errorDetail = errorJson.detail || errorJson.message;
+        errorDetail = formatApiError(errorJson);
       } catch {
         // Response is not JSON
       }
@@ -51,7 +52,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 
     return (await response.json()) as T;
   } catch (err) {
-    if (err instanceof ApiError) {
+    if (err instanceof ApiError || options?.signal?.aborted) {
       throw err;
     }
     const message =
@@ -71,33 +72,33 @@ export const api = {
   /**
    * Fetch courses, optionally filtered by semester (1-8)
    */
-  async getCourses(semester?: number): Promise<Course[]> {
+  async getCourses(semester?: number, signal?: AbortSignal): Promise<Course[]> {
     const params = new URLSearchParams();
     if (semester !== undefined && semester > 0) {
       params.set('semester', semester.toString());
     }
     const query = params.toString() ? `?${params.toString()}` : '';
-    return request<Course[]>(`/api/courses${query}`);
+    return request<Course[]>(`/api/courses${query}`, { signal });
   },
 
   /**
    * Fetch a single course with its associated resources
    */
-  async getCourse(id: number): Promise<CourseDetail> {
-    return request<CourseDetail>(`/api/courses/${id}`);
+  async getCourse(id: number, signal?: AbortSignal): Promise<CourseDetail> {
+    return request<CourseDetail>(`/api/courses/${id}`, { signal });
   },
 
   /**
    * Fetch all resource categories with counts
    */
-  async getCategories(): Promise<Category[]> {
-    return request<Category[]>('/api/categories');
+  async getCategories(signal?: AbortSignal): Promise<Category[]> {
+    return request<Category[]>('/api/categories', { signal });
   },
 
   /**
    * Fetch paginated resources with optional multi-facet filters
    */
-  async getResources(params?: ResourceQueryParams): Promise<PaginatedResources> {
+  async getResources(params?: ResourceQueryParams, signal?: AbortSignal): Promise<PaginatedResources> {
     const queryParams = new URLSearchParams();
 
     if (params) {
@@ -122,14 +123,14 @@ export const api = {
     }
 
     const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
-    return request<PaginatedResources>(`/api/resources${query}`);
+    return request<PaginatedResources>(`/api/resources${query}`, { signal });
   },
 
   /**
    * Fetch detailed resource metadata
    */
-  async getResource(id: number): Promise<Resource> {
-    return request<Resource>(`/api/resources/${id}`);
+  async getResource(id: number, signal?: AbortSignal): Promise<Resource> {
+    return request<Resource>(`/api/resources/${id}`, { signal });
   },
 
   /**

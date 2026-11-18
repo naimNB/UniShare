@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search,
@@ -7,7 +7,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { Category, Course, PaginatedResources } from '../types/api';
+import { useAsyncData } from '../hooks/useAsyncData';
+import { MAX_SEARCH_LENGTH, parseResourceParams } from '../utils/queryParams';
 import { ResourceCard } from '../components/ResourceCard';
 import { Pagination } from '../components/Pagination';
 import { GridSkeleton } from '../components/LoadingSkeleton';
@@ -15,77 +16,43 @@ import { ErrorMessage } from '../components/ErrorMessage';
 import { EmptyState } from '../components/EmptyState';
 import { getSemesterOrdinal } from '../utils/formatters';
 
-const PAGE_SIZE = 12;
-
 export function ResourcesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // Filter values from URL query
-  const queryParam = searchParams.get('q') || '';
-  const semesterParam = searchParams.get('semester');
-  const courseIdParam = searchParams.get('course_id');
-  const categoryIdParam = searchParams.get('category_id');
-  const offsetParam = searchParams.get('offset');
-
-  const selectedSemester = semesterParam ? parseInt(semesterParam, 10) : undefined;
-  const selectedCourseId = courseIdParam ? parseInt(courseIdParam, 10) : undefined;
-  const selectedCategoryId = categoryIdParam ? parseInt(categoryIdParam, 10) : undefined;
-  const currentOffset = offsetParam ? parseInt(offsetParam, 10) : 0;
-
-  // Local state for search input typing
+  const queryKey = searchParams.toString();
+  const { filters, error: queryError } = useMemo(
+    () => parseResourceParams(new URLSearchParams(queryKey)),
+    [queryKey],
+  );
+  const queryParam = filters.q || '';
+  const selectedSemester = filters.semester;
+  const selectedCourseId = filters.course_id;
+  const selectedCategoryId = filters.category_id;
+  // Reset the draft when the URL query changes, including browser Back/Forward.
   const [searchInput, setSearchInput] = useState(queryParam);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [paginatedData, setPaginatedData] = useState<PaginatedResources | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Synchronize local search input if URL changes
-  useEffect(() => {
+  const [previousQuery, setPreviousQuery] = useState(queryParam);
+  if (previousQuery !== queryParam) {
+    setPreviousQuery(queryParam);
     setSearchInput(queryParam);
-  }, [queryParam]);
+  }
 
-  // Load auxiliary courses and categories for dropdown filters
-  useEffect(() => {
-    async function loadAuxiliaryData() {
-      try {
-        const [coursesList, categoriesList] = await Promise.all([
-          api.getCourses(),
-          api.getCategories(),
-        ]);
-        setCourses(coursesList);
-        setCategories(categoriesList);
-      } catch (err) {
-        console.error('Failed to load filter metadata:', err);
-      }
-    }
-    loadAuxiliaryData();
+  const loadMetadata = useCallback(async (signal: AbortSignal) => {
+    const [courses, categories] = await Promise.all([
+      api.getCourses(undefined, signal),
+      api.getCategories(signal),
+    ]);
+    return { courses, categories };
   }, []);
+  const metadata = useAsyncData('filters', loadMetadata);
+  const courses = metadata.data?.courses || [];
+  const categories = metadata.data?.categories || [];
 
-  // Fetch resources when filter URL params change
-  const fetchResources = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.getResources({
-        q: queryParam || undefined,
-        semester: selectedSemester,
-        course_id: selectedCourseId,
-        category_id: selectedCategoryId,
-        limit: PAGE_SIZE,
-        offset: currentOffset,
-      });
-      setPaginatedData(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load resources');
-    } finally {
-      setLoading(false);
-    }
-  }, [queryParam, selectedSemester, selectedCourseId, selectedCategoryId, currentOffset]);
-
-  useEffect(() => {
-    fetchResources();
-  }, [fetchResources]);
+  const loadResources = useCallback((signal: AbortSignal) => api.getResources(filters, signal), [filters]);
+  const {
+    data: paginatedData,
+    loading,
+    error,
+    reload: fetchResources,
+  } = useAsyncData(queryKey, loadResources, !queryError);
 
   // Update URL helper
   const updateParams = (updates: Record<string, string | null>) => {
@@ -150,7 +117,9 @@ export function ResourcesPage() {
               type="search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search by topic, document title, or description (e.g. BCNF, Sockets, Dynamic Programming)..."
+              aria-label="Search resources and courses"
+              maxLength={MAX_SEARCH_LENGTH}
+              placeholder="Search by course code, course name, topic, or document title..."
               className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-100 transition-all text-slate-900 placeholder:text-slate-400"
             />
             {searchInput && (
@@ -169,12 +138,21 @@ export function ResourcesPage() {
           </div>
           <button
             type="submit"
+            aria-label="Search resources"
             className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-2xs hover:shadow-xs transition-colors shrink-0 inline-flex items-center gap-1.5"
           >
             <Search className="w-4 h-4" />
             <span className="hidden sm:inline">Search</span>
           </button>
         </form>
+
+        {metadata.error && (
+          <ErrorMessage
+            title="Course and category filters are unavailable"
+            message={metadata.error}
+            onRetry={metadata.reload}
+          />
+        )}
 
         {/* Filter Dropdowns Row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
@@ -203,7 +181,7 @@ export function ResourcesPage() {
               className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-hidden"
             >
               <option value="">All Semesters</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+              {Array.from({ length: Math.max(8, selectedSemester || 0) }, (_, index) => index + 1).map((sem) => (
                 <option key={sem} value={sem}>
                   {getSemesterOrdinal(sem)} Semester
                 </option>
@@ -221,6 +199,7 @@ export function ResourcesPage() {
             </label>
             <select
               id="filter-course"
+              disabled={metadata.loading || !!metadata.error}
               value={selectedCourseId !== undefined ? selectedCourseId.toString() : ''}
               onChange={(e) => updateParams({ course_id: e.target.value || null })}
               className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-hidden truncate"
@@ -251,6 +230,7 @@ export function ResourcesPage() {
             </label>
             <select
               id="filter-category"
+              disabled={metadata.loading || !!metadata.error}
               value={selectedCategoryId !== undefined ? selectedCategoryId.toString() : ''}
               onChange={(e) => updateParams({ category_id: e.target.value || null })}
               className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-hidden"
@@ -339,10 +319,12 @@ export function ResourcesPage() {
       </div>
 
       {/* Results Section */}
-      {error && <ErrorMessage message={error} onRetry={fetchResources} />}
-
-      {loading ? (
+      {queryError ? (
+        <ErrorMessage title="Invalid library URL" message={`${queryError} Clear the URL filters to continue.`} onRetry={handleResetFilters} retryLabel="Clear URL filters" />
+      ) : loading ? (
         <GridSkeleton count={6} />
+      ) : error ? (
+        <ErrorMessage message={error} onRetry={fetchResources} />
       ) : paginatedData && paginatedData.items.length > 0 ? (
         <div className="space-y-6">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
@@ -371,15 +353,15 @@ export function ResourcesPage() {
         </div>
       ) : (
         <EmptyState
-          title="No resources match your filter criteria"
-          message="No study materials were found with the selected combinations. Try clearing some filters or searching for a broader term."
+          title={paginatedData && paginatedData.total > 0 ? 'This page is beyond the available results' : 'No resources match your filter criteria'}
+          message={paginatedData && paginatedData.total > 0 ? 'Return to the first page to see resources matching these filters.' : 'No study materials were found with the selected combinations. Try clearing some filters or searching for a broader term.'}
           action={
             <button
               type="button"
-              onClick={handleResetFilters}
+              onClick={() => paginatedData && paginatedData.total > 0 ? updateParams({ offset: null }) : handleResetFilters()}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors"
             >
-              Clear All Filters
+              {paginatedData && paginatedData.total > 0 ? 'Return to First Page' : 'Clear All Filters'}
             </button>
           }
         />
