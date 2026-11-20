@@ -24,6 +24,8 @@ def list_courses(
             Course.code,
             Course.name,
             Course.semester,
+            Course.credits,
+            Course.display_order,
             Course.description,
             func.count(Resource.id).label("resource_count"),
         )
@@ -34,7 +36,7 @@ def list_courses(
     if semester is not None:
         query = query.where(Course.semester == semester)
 
-    query = query.order_by(Course.semester.asc(), Course.code.asc())
+    query = query.order_by(Course.semester.asc(), Course.display_order.asc(), Course.code.asc())
 
     rows = db.execute(query).all()
     results = [
@@ -43,6 +45,10 @@ def list_courses(
             code=row.code,
             name=row.name,
             semester=row.semester,
+            credits=float(row.credits) if row.credits is not None else 3.0,
+            display_order=row.display_order or 0,
+            year=(row.semester + 1) // 2,
+            term=1 if row.semester % 2 != 0 else 2,
             description=row.description,
             resource_count=row.resource_count,
         )
@@ -75,6 +81,10 @@ def get_course(
         code=course.code,
         name=course.name,
         semester=course.semester,
+        credits=float(course.credits) if course.credits is not None else 3.0,
+        display_order=course.display_order or 0,
+        year=(course.semester + 1) // 2,
+        term=1 if course.semester % 2 != 0 else 2,
         description=course.description,
         resource_count=len(course.resources),
         resources=course.resources,

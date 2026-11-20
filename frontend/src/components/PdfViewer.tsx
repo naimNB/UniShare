@@ -30,20 +30,20 @@ export function PdfViewer({
 
   return (
     <div
-      className={`bg-slate-900 rounded-2xl overflow-hidden shadow-lg border border-slate-800 transition-all ${
+      className={`bg-[#103831] rounded-xl overflow-hidden shadow-lg border border-[#164A41] transition-all ${
         isFullscreen
-          ? 'fixed inset-4 z-50 flex flex-col bg-slate-950/95 backdrop-blur-md'
+          ? 'fixed inset-4 z-50 flex flex-col bg-[#103831]/95 backdrop-blur-md'
           : 'flex flex-col h-[650px] sm:h-[750px]'
       }`}
     >
       {/* Viewer Header */}
-      <div className="px-4 py-3 bg-slate-800 border-b border-slate-700/80 flex flex-wrap items-center justify-between gap-3 text-white text-xs">
+      <div className="px-4 py-3 bg-[#164A41] border-b border-[#103831] flex flex-wrap items-center justify-between gap-3 text-white text-xs">
         <div className="flex items-center gap-2 min-w-0">
-          <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+          <FileText className="w-4 h-4 text-[#CBDAD0] shrink-0" />
           <span className="font-semibold truncate max-w-xs sm:max-w-md" title={title}>
             {filename}
           </span>
-          <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 text-[10px] uppercase font-bold">
+          <span className="hidden sm:inline-block px-2 py-0.5 rounded-md bg-[#103831] text-[#E5EEE8] text-[10px] uppercase font-bold border border-[#205C52]">
             {mimeType.split('/')[1] || 'PDF'}
           </span>
         </div>
@@ -54,7 +54,7 @@ export function PdfViewer({
             href={previewUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[#E5EEE8] hover:text-white transition-colors border border-white/10"
             title="Open in standalone tab"
           >
             <ExternalLink className="w-3.5 h-3.5" />
@@ -65,7 +65,7 @@ export function PdfViewer({
           <a
             href={downloadUrl}
             download={filename}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#C26B3D] hover:bg-[#A5552D] text-white font-semibold transition-colors shadow-2xs"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Download</span>
@@ -75,7 +75,7 @@ export function PdfViewer({
           <button
             type="button"
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[#E5EEE8] hover:text-white transition-colors border border-white/10"
             title={isFullscreen ? 'Exit fullscreen' : 'Expand preview'}
             aria-label={isFullscreen ? 'Exit fullscreen' : 'Expand preview'}
           >
@@ -89,13 +89,13 @@ export function PdfViewer({
       </div>
 
       {/* Mobile Notice Bar */}
-      <div className="sm:hidden px-3 py-1.5 bg-indigo-950 text-indigo-200 text-[11px] flex items-center justify-between border-b border-indigo-900">
+      <div className="sm:hidden px-3 py-1.5 bg-[#103831] text-[#E5EEE8] text-[11px] flex items-center justify-between border-b border-[#164A41]">
         <span>Previewing in mobile mode.</span>
         <a
           href={previewUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="underline font-semibold"
+          className="underline font-semibold text-[#CBDAD0]"
         >
           Open Fullscreen
         </a>
@@ -124,7 +124,7 @@ export function PdfViewer({
               <a
                 href={downloadUrl}
                 download={filename}
-                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold"
+                className="px-3.5 py-2 bg-[#C26B3D] hover:bg-[#A5552D] text-white rounded-lg text-xs font-semibold"
               >
                 Download Document
               </a>
@@ -140,7 +140,7 @@ export function PdfViewer({
           >
             {/* Fallback if <object> cannot render */}
             <div className="p-8 text-center text-slate-300 max-w-md">
-              <FileText className="w-12 h-12 text-indigo-400 mx-auto mb-3 opacity-80" />
+              <FileText className="w-12 h-12 text-[#CBDAD0] mx-auto mb-3 opacity-80" />
               <h4 className="font-bold text-white text-base mb-1">
                 Embedded Document Preview
               </h4>
@@ -160,7 +160,7 @@ export function PdfViewer({
                 <a
                   href={downloadUrl}
                   download={filename}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"
+                  className="px-4 py-2 bg-[#C26B3D] hover:bg-[#A5552D] text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Download

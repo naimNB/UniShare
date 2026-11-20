@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import CORS_ORIGINS
 from backend.app.database import init_db
-from backend.app.routers import categories, courses, health, resources
+from backend.app.routers import categories, courses, health, resources, submissions
 
 
 @asynccontextmanager
@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="UniShare API",
     version="1.0.0",
-    description="Read-only University Academic Resource Sharing API",
+    description="University Academic Resource Sharing API with Moderated Note Submissions",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -27,7 +27,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "HEAD", "OPTIONS"],
+    allow_methods=["GET", "HEAD", "OPTIONS", "POST"],
     allow_headers=["*"],
 )
 
@@ -36,6 +36,7 @@ app.include_router(health.router, prefix="/api")
 app.include_router(courses.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
 app.include_router(resources.router, prefix="/api")
+app.include_router(submissions.router, prefix="/api")
 
 
 @app.get("/", tags=["Root"])

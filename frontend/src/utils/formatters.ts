@@ -76,11 +76,11 @@ export function getCategoryTheme(categoryName: string = ''): CategoryTheme {
 
   if (normalized.includes('lab') || normalized.includes('manual')) {
     return {
-      bg: 'bg-emerald-50',
-      text: 'text-emerald-700',
-      border: 'border-emerald-200',
-      badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      ring: 'focus:ring-emerald-500',
+      bg: 'bg-teal-50',
+      text: 'text-teal-700',
+      border: 'border-teal-200',
+      badge: 'bg-teal-100 text-teal-800 border-teal-200',
+      ring: 'focus:ring-teal-500',
     };
   }
 
@@ -110,10 +110,10 @@ export function getCategoryTheme(categoryName: string = ''): CategoryTheme {
 
   // Reference materials / fallback
   return {
-    bg: 'bg-indigo-50',
-    text: 'text-indigo-700',
-    border: 'border-indigo-200',
-    badge: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-    ring: 'focus:ring-indigo-500',
+    bg: 'bg-[#E5EEE8]',
+    text: 'text-[#164A41]',
+    border: 'border-[#CBDAD0]',
+    badge: 'bg-[#E5EEE8] text-[#164A41] border-[#CBDAD0]',
+    ring: 'focus:ring-[#164A41]',
   };
 }

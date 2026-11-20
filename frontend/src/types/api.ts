@@ -3,6 +3,10 @@ export interface CourseSummary {
   code: string;
   name: string;
   semester: number;
+  credits: number;
+  display_order?: number;
+  year?: number;
+  term?: number;
 }
 
 export interface CategorySummary {
@@ -15,6 +19,10 @@ export interface Course {
   code: string;
   name: string;
   semester: number;
+  credits: number;
+  display_order: number;
+  year: number;
+  term: number;
   description: string | null;
   resource_count: number;
 }
@@ -76,4 +84,11 @@ export interface HealthResponse {
   status: string;
   app: string;
   version: string;
+}
+
+export interface SubmissionCreateResponse {
+  id: number;
+  title: string;
+  status: string;
+  message: string;
 }

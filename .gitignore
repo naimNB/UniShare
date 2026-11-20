@@ -28,12 +28,18 @@ env/
 .coverage
 htmlcov/
 
-# Databases
+# Databases, Backups & Exports
 *.db
 *.sqlite
 *.sqlite3
 backend/*.db
 backend/*.sqlite3
+*.backup*
+*.sql
+*.dump
+exports/
+fixtures/
+*manifest*.json
 
 # Node & Frontend
 frontend/node_modules/
@@ -47,9 +53,11 @@ frontend/*.local
 .env.*
 !.env.example
 
-# Storage / Uploads (preserve directories with .gitkeep)
+# Storage / Uploads / Submissions (preserve directories with .gitkeep)
 backend/storage/uploads/*
 !backend/storage/uploads/.gitkeep
+backend/storage/submissions/*
+!backend/storage/submissions/.gitkeep
 
 # IDEs & System
 .vscode/

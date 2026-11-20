@@ -5,7 +5,7 @@ import { ScrollToTop } from './ScrollToTop';
 
 export function Layout() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
+    <div className="min-h-screen flex flex-col bg-[#F6F4EF] text-[#1D2933] font-sans selection:bg-[#E5EEE8] selection:text-[#164A41]">
       <ScrollToTop />
       <Navbar />
       <main className="flex-1">

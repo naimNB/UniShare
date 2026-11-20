@@ -1,13 +1,15 @@
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
-from backend.app.config import STORAGE_DIR
+from backend.app.config import STORAGE_BACKEND, STORAGE_DIR
 from backend.app.database import get_db
 from backend.app.models import Course, Resource
 from backend.app.schemas import PaginatedResources, ResourceRead
+from backend.app.storage import get_storage_backend
+
 
 router = APIRouter(prefix="/resources", tags=["Resources"])
 
@@ -155,10 +157,11 @@ def get_resource(
 def preview_resource(
     resource_id: int,
     db: Session = Depends(get_db),
-) -> FileResponse:
+):
     """
     Serve document file for inline browser viewing (PDF viewer).
-    Sets Content-Disposition to inline.
+    When cloud storage (Supabase) is configured, redirects to public CDN URL.
+    Otherwise serves local file securely with Content-Disposition inline.
     """
     resource = db.execute(
         select(Resource).where(Resource.id == resource_id)
@@ -168,6 +171,18 @@ def preview_resource(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Resource with ID {resource_id} not found",
+        )
+
+    storage = get_storage_backend()
+    if STORAGE_BACKEND == "supabase":
+        if not storage.public_file_exists(resource.file_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Resource document file not found in storage",
+            )
+        return RedirectResponse(
+            url=storage.get_public_url(resource.file_path),
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
         )
 
     file_path = resolve_safe_file_path(resource.file_path)
@@ -184,10 +199,10 @@ def preview_resource(
 def download_resource(
     resource_id: int,
     db: Session = Depends(get_db),
-) -> FileResponse:
+):
     """
-    Download resource document as an attachment.
-    Increments download_count on successful download initiation.
+    Download resource document. Increments download_count on initiation.
+    Redirects to Supabase CDN when cloud storage is active, or streams local file.
     """
     resource = db.execute(
         select(Resource).where(Resource.id == resource_id)
@@ -199,9 +214,23 @@ def download_resource(
             detail=f"Resource with ID {resource_id} not found",
         )
 
+    storage = get_storage_backend()
+    if STORAGE_BACKEND == "supabase":
+        if not storage.public_file_exists(resource.file_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Resource document file not found in storage",
+            )
+        resource.download_count = (resource.download_count or 0) + 1
+        db.commit()
+        return RedirectResponse(
+            url=storage.get_public_url(resource.file_path),
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        )
+
     file_path = resolve_safe_file_path(resource.file_path)
 
-    # Increment download count
+    # Increment download count only after verifying file exists on disk
     resource.download_count = (resource.download_count or 0) + 1
     db.commit()
 

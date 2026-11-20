@@ -30,10 +30,10 @@ export function Pagination({
       aria-label="Pagination Navigation"
       className={`flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-2 ${className}`}
     >
-      <div className="text-xs sm:text-sm text-slate-500">
-        Showing <span className="font-semibold text-slate-900">{startItem}</span> to{' '}
-        <span className="font-semibold text-slate-900">{endItem}</span> of{' '}
-        <span className="font-semibold text-slate-900">{total}</span> resources
+      <div className="text-xs sm:text-sm text-[#566775]">
+        Showing <span className="font-semibold text-[#1D2933]">{startItem}</span> to{' '}
+        <span className="font-semibold text-[#1D2933]">{endItem}</span> of{' '}
+        <span className="font-semibold text-[#1D2933]">{total}</span> resources
       </div>
 
       <div className="flex items-center gap-2">
@@ -43,8 +43,8 @@ export function Pagination({
           onClick={() => onPageChange(Math.max(0, offset - limit))}
           className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border transition-colors ${
             canGoPrev
-              ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs'
-              : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+              ? 'bg-white border-[#DDE3DC] text-[#1D2933] hover:bg-[#E5EEE8] hover:text-[#164A41] shadow-2xs'
+              : 'bg-[#F6F4EF] border-[#DDE3DC] text-[#566775]/50 cursor-not-allowed'
           }`}
           aria-label="Previous page"
         >
@@ -52,7 +52,7 @@ export function Pagination({
           Previous
         </button>
 
-        <span className="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-700 rounded-md">
+        <span className="text-xs font-semibold px-2.5 py-1 bg-[#E5EEE8] text-[#164A41] border border-[#CBDAD0] rounded-md">
           {currentPage} / {totalPages}
         </span>
 
@@ -62,8 +62,8 @@ export function Pagination({
           onClick={() => onPageChange(offset + limit)}
           className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border transition-colors ${
             canGoNext
-              ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs'
-              : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+              ? 'bg-white border-[#DDE3DC] text-[#1D2933] hover:bg-[#E5EEE8] hover:text-[#164A41] shadow-2xs'
+              : 'bg-[#F6F4EF] border-[#DDE3DC] text-[#566775]/50 cursor-not-allowed'
           }`}
           aria-label="Next page"
         >

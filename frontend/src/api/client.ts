@@ -6,6 +6,7 @@ import type {
   PaginatedResources,
   Resource,
   ResourceQueryParams,
+  SubmissionCreateResponse,
 } from '../types/api';
 import { formatApiError } from '../utils/apiErrors';
 
@@ -145,5 +146,16 @@ export const api = {
    */
   getDownloadUrl(id: number): string {
     return `${API_BASE}/api/resources/${id}/download`;
+  },
+
+  /**
+   * Submit a student study resource for moderation
+   */
+  async submitResource(formData: FormData, signal?: AbortSignal): Promise<SubmissionCreateResponse> {
+    return request<SubmissionCreateResponse>('/api/submissions', {
+      method: 'POST',
+      body: formData,
+      signal,
+    });
   },
 };

@@ -76,7 +76,7 @@ On Windows, activate with `.venv\Scripts\Activate.ps1` in PowerShell instead. Th
 python -m backend.scripts.seed seed
 ```
 
-A fresh database receives 16 courses, 5 categories, and 12 resources with generated sample PDFs. These are **demonstration documents**, and their initial download counts are sample values. They are not verified official university materials.
+A fresh database receives all 78 official CSE curriculum courses across 8 semesters (161.00 total credits), 5 categories, and 12 demonstration resources with generated sample PDFs. These are **demonstration documents**, and their initial download counts are sample values. They are not verified official university materials.
 
 Seeding is explicit: starting the API creates missing tables but does not add demo content. Repeating the seed does not duplicate the demo records, but it regenerates demo files and updates matching demo-resource metadata. Use it on a disposable demo database, not as an update tool for a curated library. Do not use `--reset` on data you want to keep; it drops database tables.
 
@@ -124,7 +124,7 @@ The course and category must already exist. Example, from the repository root wi
 ```bash
 python -m backend.scripts.seed import-file \
   --file "/absolute/path/Normalization.pdf" \
-  --course "CSE 3101" \
+  --course "CSE 2103" \
   --category "Lecture Notes" \
   --title "Normalization study notes" \
   --description "Notes on functional dependencies and normal forms."

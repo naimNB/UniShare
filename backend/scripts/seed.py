@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from pypdf import PdfReader
@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 def generate_sample_pdf(path: Path, title: str, subtitle: str, lines: List[str]) -> int:
     """Generate a clean, standard 1-page PDF document for demo resources."""
+    title = title.replace("•", "-").replace("—", "--").replace("–", "-")
+    subtitle = subtitle.replace("•", "-").replace("—", "--").replace("–", "-")
     content_stream = [
         "BT",
         "/F1 18 Tf",
@@ -47,7 +49,8 @@ def generate_sample_pdf(path: Path, title: str, subtitle: str, lines: List[str])
         "/F1 10 Tf",
     ]
     for line in lines:
-        escaped = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        line_clean = line.replace("•", "-").replace("—", "--").replace("–", "-")
+        escaped = line_clean.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
         content_stream.extend(["0 -18 Td", f"({escaped}) Tj"])
 
     content_stream.extend([
@@ -150,50 +153,184 @@ def remove_replaced_file(db: Session, previous_name: str, current_name: str) -> 
         logger.warning("Could not clean up replaced resource file %r: %s", previous_name, exc)
 
 
+OFFICIAL_CURRICULUM = [
+    # YEAR 1 — SEMESTER 1 (20.00 credits, 9 courses)
+    (1, 1, "CSE 1101", "Structured Programming Language", 3.00),
+    (1, 2, "CSE 1102", "Structured Programming Language Sessional", 1.00),
+    (1, 3, "EEE 1101", "Basic Electrical Engineering", 3.00),
+    (1, 4, "EEE 1102", "Basic Electrical Engineering Sessional", 1.00),
+    (1, 5, "MTH 1101", "Differential and Integral Calculus and Matrices", 3.00),
+    (1, 6, "PHY 1101", "Physics I", 3.00),
+    (1, 7, "ENG 1101", "Technical and Communicative English", 3.00),
+    (1, 8, "CE 1102", "Engineering Drawing and CAD Sessional", 1.00),
+    (1, 9, "BAN 1201", "Functional Bengali Language", 2.00),
+    # YEAR 1 — SEMESTER 2 (19.00 credits, 9 courses)
+    (2, 1, "CSE 1203", "Object Oriented Programming Language", 3.00),
+    (2, 2, "CSE 1204", "Object Oriented Programming Language Sessional", 1.00),
+    (2, 3, "EEE 1201", "Electronic Devices and Circuits", 3.00),
+    (2, 4, "EEE 1202", "Electronic Devices and Circuits Sessional", 1.00),
+    (2, 5, "PHY 1201", "Physics II", 3.00),
+    (2, 6, "PHY 1202", "Physics Sessional", 1.00),
+    (2, 7, "MTH 1201", "Differential Equations and Transform Mathematics", 3.00),
+    (2, 8, "ENG 1202", "Developing English Skills Sessional", 1.00),
+    (2, 9, "CSE 1103", "Discrete Mathematics", 3.00),
+    # YEAR 2 — SEMESTER 1 (20.00 credits, 9 courses)
+    (3, 1, "CSE 2105", "Digital Electronics", 3.00),
+    (3, 2, "CSE 2106", "Digital Electronics Sessional", 1.00),
+    (3, 3, "CSE 1201", "Data Structure", 3.00),
+    (3, 4, "CSE 1202", "Data Structure Sessional", 1.00),
+    (3, 5, "MTH 2101", "Linear Algebra, Vector Analysis and Co-ordinate Geometry", 3.00),
+    (3, 6, "CHM 2101", "Chemistry", 3.00),
+    (3, 7, "CHM 2102", "Chemistry Sessional", 1.00),
+    (3, 8, "SS 2101", "Engineering Economics", 2.00),
+    (3, 9, "BUS 2201", "Financial, Cost and Managerial Accounting", 3.00),
+    # YEAR 2 — SEMESTER 2 (21.00 credits, 10 courses)
+    (4, 1, "CSE 3100", "Software Development Project I", 1.00),
+    (4, 2, "CSE 2103", "Database Management System", 3.00),
+    (4, 3, "CSE 2104", "Database Management System Sessional", 1.00),
+    (4, 4, "CSE 2101", "Design and Analysis of Algorithm", 3.00),
+    (4, 5, "CSE 2102", "Design and Analysis of Algorithm Sessional", 1.00),
+    (4, 6, "CSE 2203", "Data Communication", 3.00),
+    (4, 7, "CSE 2207", "Numerical Methods", 2.00),
+    (4, 8, "MTH 2201", "Complex Variable, Probability and Statistics", 3.00),
+    (4, 9, "HUM 2201", "Bangladesh Studies and History of Independence", 2.00),
+    (4, 10, "HUM 3101", "Professional Ethics and Environmental Protection", 2.00),
+    # YEAR 3 — SEMESTER 1 (21.00 credits, 10 courses)
+    (5, 1, "CSE 2205", "Computer Architecture and Organization", 3.00),
+    (5, 2, "CSE 2206", "Computer Architecture and Organization Sessional", 1.00),
+    (5, 3, "CSE 3103", "Operating Systems", 3.00),
+    (5, 4, "CSE 3104", "Operating Systems Sessional", 1.00),
+    (5, 5, "CSE 2201", "Web Engineering", 3.00),
+    (5, 6, "CSE 2202", "Web Engineering Sessional", 1.00),
+    (5, 7, "CSE 3205", "Computer Networking", 3.00),
+    (5, 8, "CSE 3206", "Computer Networking Sessional", 1.00),
+    (5, 9, "LAW 3201", "Cyber and Intellectual Property Law", 2.00),
+    (5, 10, "BUS 3101", "Technology Entrepreneurship for Business", 3.00),
+    # YEAR 3 — SEMESTER 2 (20.00 credits, 11 courses)
+    (6, 1, "CSE 3200", "Software Development Project II", 1.00),
+    (6, 2, "CSE 3201", "Compiler Design", 3.00),
+    (6, 3, "CSE 3202", "Compiler Design Sessional", 1.00),
+    (6, 4, "CSE 3203", "Digital Signal Processing", 3.00),
+    (6, 5, "CSE 3204", "Digital Signal Processing Sessional", 1.00),
+    (6, 6, "CSE 3105", "Microprocessors, Microcontrollers and Embedded Systems", 3.00),
+    (6, 7, "CSE 3106", "Microprocessors, Microcontrollers and Embedded Systems Sessional", 1.00),
+    (6, 8, "CSE 4201", "Computer Graphics", 3.00),
+    (6, 9, "CSE 4202", "Computer Graphics Sessional", 1.00),
+    (6, 10, "CSE 3102", "Mobile Application Development Sessional", 1.00),
+    (6, 11, "CSE 3107", "Software Design Pattern", 2.00),
+    # YEAR 4 — SEMESTER 1 (19.00 credits, 10 courses)
+    (7, 1, "CSE 4205", "Digital Image Processing", 3.00),
+    (7, 2, "CSE 4206", "Digital Image Processing Sessional", 1.00),
+    (7, 3, "CSE 4103", "Cryptography and Network Security", 3.00),
+    (7, 4, "CSE 4104", "Cryptography and Network Security Sessional", 1.00),
+    (7, 5, "CSE 4105", "Artificial Intelligence", 3.00),
+    (7, 6, "CSE 4106", "Artificial Intelligence Sessional", 1.00),
+    (7, 7, "CSE 4123", "CSE Optional I / Simulation and Modeling", 3.00),
+    (7, 8, "CSE 4124", "CSE Optional I Sessional / Simulation and Modeling Sessional", 1.00),
+    (7, 9, "CSE 3110", "Technical Writing and Presentation", 1.00),
+    (7, 10, "CSE 4000(A)", "Thesis / Project", 2.00),
+    # YEAR 4 — SEMESTER 2 (21.00 credits, 10 courses)
+    (8, 1, "CSE 4203", "Machine Learning", 3.00),
+    (8, 2, "CSE 4204", "Machine Learning Sessional", 1.00),
+    (8, 3, "CSE 4101", "Big Data Analysis", 3.00),
+    (8, 4, "CSE 4102", "Big Data Analysis Sessional", 1.00),
+    (8, 5, "CSE 4237", "CSE Optional II / Data Mining and Warehousing", 3.00),
+    (8, 6, "CSE 4238", "CSE Optional II / Data Mining and Warehousing Sessional", 1.00),
+    (8, 7, "CSE 4251", "CSE Optional III / Computer Vision", 3.00),
+    (8, 8, "CSE 4252", "CSE Optional III / Computer Vision Sessional", 1.00),
+    (8, 9, "CSE 3250", "Industrial Training", 1.00),
+    (8, 10, "CSE 4000(B)", "Thesis or Project Work", 4.00),
+]
+
+RESOURCE_INTENDED_COURSE_MAP = {
+    # Relational Database / SQL / Normalization / Exam -> CSE 2103 (Database Management System)
+    "Introduction to Relational Databases & Relational Algebra": "CSE 2103",
+    "Database Normalization (1NF, 2NF, 3NF & BCNF) Reference Guide": "CSE 2103",
+    "Lab Manual 02: Advanced SQL Queries and B-Tree Indexing": "CSE 2103",
+    "Final Examination 2025: Database Systems Past Paper": "CSE 2103",
+    "Sample Final Examination: Database Systems Past Paper (Demo)": "CSE 2103",
+    # Web Engineering syllabus / REST API -> CSE 2201 (Web Engineering)
+    "Official Course Syllabus & Grading Matrix: Web Engineering": "CSE 2201",
+    "Sample Course Syllabus & Evaluation Matrix: Web Engineering (Demo)": "CSE 2201",
+    "Client-Server Architecture & RESTful API Design Principles": "CSE 2201",
+    # OS Scheduling / POSIX Threads -> CSE 3103 (Operating Systems)
+    "CPU Scheduling Algorithms & Concurrency Primitives": "CSE 3103",
+    "Lab Manual 04: Multi-threaded Programming with POSIX Threads": "CSE 3103",
+    # Data Structures / Trees & Heaps -> CSE 1201 (Data Structure)
+    "Balanced Binary Search Trees & Heap Algorithms Cheatsheet": "CSE 1201",
+    # Algorithms / DP & Graphs -> CSE 2101 (Design and Analysis of Algorithm)
+    "Lab Manual 03: Dynamic Programming & Shortest Path Algorithms": "CSE 2101",
+    # Computer Networking / Sockets Guide -> CSE 3205 (Computer Networking)
+    "Computer Networks: Socket Programming Guide in Python & C": "CSE 3205",
+    # Software Design Pattern Exam / Design Patterns -> CSE 3107 (Software Design Pattern)
+    "Midterm Examination 2025: Software Engineering Questions": "CSE 3107",
+    "Sample Midterm Examination: Software Design Pattern Questions (Demo)": "CSE 3107",
+}
+
+
 def seed_database(db: Session) -> None:
     """Seed demo courses, categories, and generate sample academic PDFs idempotently."""
     print("🌱 Initializing and seeding UniShare database...")
 
-    # 1. Courses across semesters 1 to 8
-    courses_data = [
-        # Semester 1
-        {"code": "CSE 1101", "name": "Introduction to Computer Systems", "semester": 1, "description": "Foundations of computing, von Neumann architecture, number systems, and basic operating concepts."},
-        {"code": "MATH 1103", "name": "Differential & Integral Calculus", "semester": 1, "description": "Limits, derivatives, integration techniques, and applications in engineering problems."},
-        # Semester 2
-        {"code": "CSE 1201", "name": "Structured Programming Language", "semester": 2, "description": "Structured programming concepts using C, memory management, pointers, and file operations."},
-        {"code": "PHY 1203", "name": "Physics for Engineers", "semester": 2, "description": "Electromagnetism, wave optics, modern physics, and laboratory experiments."},
-        # Semester 3
-        {"code": "CSE 2101", "name": "Data Structures", "semester": 3, "description": "Arrays, linked lists, stacks, queues, trees, heaps, graphs, hashing, and complexity analysis."},
-        {"code": "MATH 2105", "name": "Discrete Mathematics", "semester": 3, "description": "Set theory, logic, proof techniques, combinatorics, relations, and graph theory."},
-        # Semester 4
-        {"code": "CSE 2201", "name": "Algorithms Design and Analysis", "semester": 4, "description": "Divide and conquer, greedy strategies, dynamic programming, graph algorithms, and NP-completeness."},
-        {"code": "CSE 2203", "name": "Digital Logic Design", "semester": 4, "description": "Boolean algebra, combinational logic, sequential circuits, flip-flops, registers, and counters."},
-        # Semester 5
-        {"code": "CSE 3101", "name": "Database Management Systems", "semester": 5, "description": "Relational data model, SQL, normalization theory, indexing, query optimization, and transactions."},
-        {"code": "CSE 3103", "name": "Operating Systems", "semester": 5, "description": "Processes, threads, CPU scheduling, concurrency, deadlocks, memory virtualization, and file systems."},
-        # Semester 6
-        {"code": "CSE 3201", "name": "Software Engineering", "semester": 6, "description": "Software development lifecycles, Agile methodology, requirements engineering, design patterns, and testing."},
-        {"code": "CSE 3203", "name": "Computer Networks", "semester": 6, "description": "OSI & TCP/IP reference models, routing algorithms, transport layer protocols, socket programming, and network security."},
-        # Semester 7
-        {"code": "CSE 4101", "name": "Artificial Intelligence", "semester": 7, "description": "State space search, heuristics, knowledge representation, probabilistic reasoning, and machine learning basics."},
-        {"code": "CSE 4103", "name": "Web Engineering", "semester": 7, "description": "Client-server architecture, modern web frameworks, RESTful API design, frontend state management, and scalability."},
-        # Semester 8
-        {"code": "CSE 4201", "name": "Computer & Cyber Security", "semester": 8, "description": "Cryptography, symmetric/asymmetric ciphers, public-key infrastructure, network defense, and ethical hacking."},
-        {"code": "CSE 4203", "name": "Distributed Systems", "semester": 8, "description": "Consensus algorithms, RPC, message passing, replication, fault tolerance, and distributed storage."},
-    ]
+    # Ensure schema migrations are applied
+    init_db()
 
+    # 1. Authoritative CSE Curriculum Courses (78 courses, 161.00 total credits)
+    # Temporary rename existing non-official or outdated course codes to avoid unique constraint collisions
+    existing_all = db.execute(select(Course)).scalars().all()
+    official_codes = {item[2] for item in OFFICIAL_CURRICULUM}
+
+    for c in existing_all:
+        if c.code not in official_codes and not c.code.startswith("__old_"):
+            c.code = f"__old_{c.code}"
+    db.flush()
+
+    # Upsert the 78 official courses
     course_map = {}
-    for c_data in courses_data:
-        existing = db.execute(select(Course).where(Course.code == c_data["code"])).scalar_one_or_none()
+    for sem, order, code, name, cred in OFFICIAL_CURRICULUM:
+        existing = db.execute(select(Course).where(Course.code == code)).scalar_one_or_none()
         if not existing:
-            existing = Course(**c_data)
-            db.add(existing)
-            db.flush()
+            # Check if an old course with __old_{code} exists to preserve its ID
+            old_matched = db.execute(select(Course).where(Course.code == f"__old_{code}")).scalar_one_or_none()
+            if old_matched:
+                old_matched.code = code
+                old_matched.name = name
+                old_matched.semester = sem
+                old_matched.credits = cred
+                old_matched.display_order = order
+                existing = old_matched
+            else:
+                existing = Course(
+                    code=code,
+                    name=name,
+                    semester=sem,
+                    credits=cred,
+                    display_order=order,
+                )
+                db.add(existing)
+                db.flush()
         else:
-            existing.name = c_data["name"]
-            existing.semester = c_data["semester"]
-            existing.description = c_data["description"]
-        course_map[existing.code] = existing
+            existing.name = name
+            existing.semester = sem
+            existing.credits = cred
+            existing.display_order = order
+        course_map[code] = existing
+
+    # Re-link existing resources to official courses safely based on semantic topic
+    all_resources = db.execute(select(Resource)).scalars().all()
+    for res in all_resources:
+        if res.title in RESOURCE_INTENDED_COURSE_MAP:
+            target_code = RESOURCE_INTENDED_COURSE_MAP[res.title]
+            if target_code in course_map:
+                res.course_id = course_map[target_code].id
+    db.flush()
+
+    # Clean up obsolete courses that have no resources attached
+    leftovers = db.execute(select(Course).where(Course.code.like("__old_%"))).scalars().all()
+    for old_c in leftovers:
+        if not old_c.resources:
+            db.delete(old_c)
+    db.flush()
 
     # 2. Categories
     categories_data = [
@@ -220,7 +357,7 @@ def seed_database(db: Session) -> None:
 
     demo_resources = [
         {
-            "course_code": "CSE 3101",
+            "course_code": "CSE 2103",
             "category_name": "Lecture Notes",
             "title": "Introduction to Relational Databases & Relational Algebra",
             "description": "Comprehensive overview of the relational model, tuples, attributes, keys, and relational algebra operators.",
@@ -228,7 +365,7 @@ def seed_database(db: Session) -> None:
             "original_filename": "Lecture01_RelationalModel_Notes.pdf",
             "download_count": 42,
             "pdf_lines": [
-                "Course: CSE 3101 - Database Management Systems",
+                "Course: CSE 2103 - Database Management System",
                 "Module 1: Foundations of the Relational Data Model",
                 "Key Concepts: Relations, Tuples, Candidate Keys, Primary Keys, Foreign Keys",
                 "Relational Algebra: Select (sigma), Project (pi), Cartesian Product, Join",
@@ -237,7 +374,7 @@ def seed_database(db: Session) -> None:
             ],
         },
         {
-            "course_code": "CSE 3101",
+            "course_code": "CSE 2103",
             "category_name": "Lecture Notes",
             "title": "Database Normalization (1NF, 2NF, 3NF & BCNF) Reference Guide",
             "description": "Step-by-step breakdown of functional dependencies, lossy vs lossless decomposition, and normalization forms.",
@@ -245,7 +382,7 @@ def seed_database(db: Session) -> None:
             "original_filename": "Lecture05_Normalization_Guide.pdf",
             "download_count": 78,
             "pdf_lines": [
-                "Course: CSE 3101 - Database Management Systems",
+                "Course: CSE 2103 - Database Management System",
                 "Module 5: Normalization and Dependency Theory",
                 "First Normal Form (1NF): Atomic attributes, elimination of repeating groups.",
                 "Second Normal Form (2NF): 1NF plus no partial dependencies on composite keys.",
@@ -255,7 +392,7 @@ def seed_database(db: Session) -> None:
             ],
         },
         {
-            "course_code": "CSE 3101",
+            "course_code": "CSE 2103",
             "category_name": "Lab Manuals",
             "title": "Lab Manual 02: Advanced SQL Queries and B-Tree Indexing",
             "description": "Practical laboratory tasks covering multi-table JOINs, subqueries, EXPLAIN plans, and index performance benchmarking.",
@@ -263,7 +400,7 @@ def seed_database(db: Session) -> None:
             "original_filename": "Lab02_AdvancedSQL_Indexing.pdf",
             "download_count": 35,
             "pdf_lines": [
-                "Course: CSE 3101 - Database Management Systems Lab",
+                "Course: CSE 2103 - Database Management System",
                 "Lab Experiment 02: Query Optimization & Indexing",
                 "Task 1: Construct complex nested queries and correlated subqueries.",
                 "Task 2: Compare execution plans using EXPLAIN QUERY PLAN.",
@@ -272,40 +409,41 @@ def seed_database(db: Session) -> None:
             ],
         },
         {
-            "course_code": "CSE 3101",
+            "course_code": "CSE 2103",
             "category_name": "Past Questions",
-            "title": "Final Examination 2025: Database Systems Past Paper",
-            "description": "Archived semester final examination questions with schema diagram and transactional analysis problems.",
+            "title": "Sample Final Examination: Database Systems Past Paper (Demo)",
+            "description": "Sample semester final examination practice paper with relational schema and transactional analysis questions (Demo Study Material).",
             "filename": "cse3101_final_exam_2025.pdf",
-            "original_filename": "CSE3101_Final_Exam_2025.pdf",
+            "original_filename": "Sample_CSE2103_Final_Exam_2025_Demo.pdf",
             "download_count": 115,
             "pdf_lines": [
-                "Department of Computer Science & Engineering",
-                "Course: CSE 3101 - Database Management Systems | Final Exam",
-                "Time: 3 Hours | Total Marks: 100",
+                "UniShare Open Academic Repository - Sample Examination Review",
+                "Course: CSE 2103 - Database Management System | Final Exam Practice",
+                "Time: 3 Hours | Total Marks: 100 (Sample Paper)",
                 "Section A: Relational calculus and SQL query formulation (30 Marks)",
                 "Section B: Normalization to BCNF and decomposition proof (35 Marks)",
                 "Section C: Concurrency control, Two-Phase Locking, and ARIES recovery (35 Marks)",
             ],
         },
         {
-            "course_code": "CSE 4103",
+            "course_code": "CSE 2201",
             "category_name": "Syllabus",
-            "title": "Official Course Syllabus & Grading Matrix: Web Engineering",
-            "description": "Semester curriculum, weekly breakdown, grading distribution, assignment schedule, and recommended readings.",
+            "title": "Sample Course Syllabus & Evaluation Matrix: Web Engineering (Demo)",
+            "description": "Demonstration course syllabus outline, weekly breakdown, grading distribution, and project reference for Web Engineering.",
             "filename": "cse4103_syllabus_spring2026.pdf",
-            "original_filename": "WebEngineering_Syllabus_2026.pdf",
+            "original_filename": "Sample_WebEngineering_Syllabus_Demo.pdf",
             "download_count": 52,
             "pdf_lines": [
-                "Course: CSE 4103 - Web Engineering | Semester: 7",
-                "Prerequisites: Data Structures (CSE 2101), Database Systems (CSE 3101)",
-                "Grading Policy: Midterm (25%), Lab Project (35%), Final Exam (40%)",
+                "UniShare Academic Platform - Course Outline Sample",
+                "Course: CSE 2201 - Web Engineering | Semester: 5 (Sample Syllabus)",
+                "Prerequisites: Data Structure (CSE 1201), Database Management System (CSE 2103)",
+                "Sample Grading Distribution: Midterm (25%), Lab Project (35%), Final Exam (40%)",
                 "Topics: RESTful Architecture, Single-Page Applications, State Management",
-                "Project: UniShare - University Resource Sharing Platform (Group Project)",
+                "Project: UniShare - University Resource Sharing Platform (Group Project Demo)",
             ],
         },
         {
-            "course_code": "CSE 4103",
+            "course_code": "CSE 2201",
             "category_name": "Lecture Notes",
             "title": "Client-Server Architecture & RESTful API Design Principles",
             "description": "Guidelines on HTTP verbs, idempotency, status codes, payload structures, pagination, and caching strategies.",
@@ -313,7 +451,7 @@ def seed_database(db: Session) -> None:
             "original_filename": "REST_API_Design_Principles.pdf",
             "download_count": 64,
             "pdf_lines": [
-                "Course: CSE 4103 - Web Engineering",
+                "Course: CSE 2201 - Web Engineering",
                 "Topic: REST Architectural Constraints & Clean API Design",
                 "Statelessness: Each request from client contains all context needed by server.",
                 "HTTP Verbs: GET (safe, idempotent), POST, PUT, DELETE, PATCH.",
@@ -355,7 +493,7 @@ def seed_database(db: Session) -> None:
             ],
         },
         {
-            "course_code": "CSE 2101",
+            "course_code": "CSE 1201",
             "category_name": "Reference Materials",
             "title": "Balanced Binary Search Trees & Heap Algorithms Cheatsheet",
             "description": "Quick reference for AVL tree rotations, Red-Black tree properties, binary heaps, and priority queues.",
@@ -363,7 +501,7 @@ def seed_database(db: Session) -> None:
             "original_filename": "DataStructures_Trees_Cheatsheet.pdf",
             "download_count": 92,
             "pdf_lines": [
-                "Course: CSE 2101 - Data Structures",
+                "Course: CSE 1201 - Data Structure",
                 "Reference Sheet: Balanced Search Trees and Priority Queues",
                 "AVL Trees: Balance factor = height(left) - height(right) in {-1, 0, 1}.",
                 "Rotations: Left-Left, Right-Right, Left-Right, Right-Left.",
@@ -372,7 +510,7 @@ def seed_database(db: Session) -> None:
             ],
         },
         {
-            "course_code": "CSE 2201",
+            "course_code": "CSE 2101",
             "category_name": "Lab Manuals",
             "title": "Lab Manual 03: Dynamic Programming & Shortest Path Algorithms",
             "description": "Laboratory problems implementing Dijkstra, Bellman-Ford, Floyd-Warshall, and 0/1 Knapsack.",
@@ -380,7 +518,7 @@ def seed_database(db: Session) -> None:
             "original_filename": "Algorithms_Lab03_DP_Graphs.pdf",
             "download_count": 55,
             "pdf_lines": [
-                "Course: CSE 2201 - Algorithms Design and Analysis Lab",
+                "Course: CSE 2101 - Design and Analysis of Algorithm Lab",
                 "Lab Exercise 03: Graph Algorithms & Memoization",
                 "Problem 1: Implement Dijkstra algorithm with adjacency list and min-heap.",
                 "Problem 2: Detect negative weight cycles using Bellman-Ford.",
@@ -388,7 +526,7 @@ def seed_database(db: Session) -> None:
             ],
         },
         {
-            "course_code": "CSE 3203",
+            "course_code": "CSE 3205",
             "category_name": "Reference Materials",
             "title": "Computer Networks: Socket Programming Guide in Python & C",
             "description": "Practical architectural guide to TCP stream sockets, UDP datagrams, multiplexing, and client-server protocols.",
@@ -396,7 +534,7 @@ def seed_database(db: Session) -> None:
             "original_filename": "Networks_SocketProgramming_Guide.pdf",
             "download_count": 71,
             "pdf_lines": [
-                "Course: CSE 3203 - Computer Networks",
+                "Course: CSE 3205 - Computer Networking",
                 "Topic: Transport Layer & Berkeley Sockets API",
                 "Socket Lifecycle: socket() -> bind() -> listen() -> accept() -> read()/write().",
                 "TCP vs UDP: Reliable stream delivery vs low-latency datagram transmission.",
@@ -405,17 +543,17 @@ def seed_database(db: Session) -> None:
             ],
         },
         {
-            "course_code": "CSE 3201",
+            "course_code": "CSE 3107",
             "category_name": "Past Questions",
-            "title": "Midterm Examination 2025: Software Engineering Questions",
-            "description": "Archived midterm examination containing UML class diagrams, sequence diagrams, and design pattern questions.",
+            "title": "Sample Midterm Examination: Software Design Pattern Questions (Demo)",
+            "description": "Sample midterm practice paper covering UML modeling, Factory and Observer design patterns, and test boundary analysis (Demo Resource).",
             "filename": "cse3201_midterm_exam_2025.pdf",
-            "original_filename": "CSE3201_Midterm_Exam_2025.pdf",
+            "original_filename": "Sample_CSE3107_Midterm_Exam_Demo.pdf",
             "download_count": 83,
             "pdf_lines": [
-                "Department of Computer Science & Engineering",
-                "Course: CSE 3201 - Software Engineering | Midterm Examination",
-                "Total Marks: 50 | Time: 90 Minutes",
+                "UniShare Open Academic Repository - Sample Midterm Review",
+                "Course: CSE 3107 - Software Design Pattern | Midterm Review (Demo)",
+                "Total Marks: 50 | Time: 90 Minutes (Practice Paper)",
                 "Question 1: Draw a UML class diagram for an academic resource sharing system.",
                 "Question 2: Apply the Factory and Observer design patterns to a notification engine.",
                 "Question 3: Formulate test cases satisfying boundary value analysis.",
@@ -428,7 +566,7 @@ def seed_database(db: Session) -> None:
         file_size = generate_sample_pdf(
             target_path,
             title=item["title"],
-            subtitle=f"{item['course_code']} • {item['category_name']}",
+            subtitle=f"{item['course_code']} - {item['category_name']}",
             lines=item["pdf_lines"],
         )
 
@@ -437,8 +575,10 @@ def seed_database(db: Session) -> None:
 
         existing_res = db.execute(
             select(Resource).where(
-                Resource.course_id == course.id,
-                Resource.title == item["title"],
+                or_(
+                    Resource.title == item["title"],
+                    Resource.file_path == item["filename"],
+                )
             )
         ).scalar_one_or_none()
 
@@ -456,6 +596,9 @@ def seed_database(db: Session) -> None:
             )
             db.add(res)
         else:
+            existing_res.title = item["title"]
+            existing_res.course_id = course.id
+            existing_res.category_id = category.id
             existing_res.description = item["description"]
             existing_res.file_path = item["filename"]
             existing_res.original_filename = item["original_filename"]

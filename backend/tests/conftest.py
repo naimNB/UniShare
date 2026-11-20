@@ -26,6 +26,8 @@ def test_env(tmp_path, monkeypatch):
     temp_path = tmp_path
     test_storage = temp_path / "uploads"
     test_storage.mkdir(parents=True, exist_ok=True)
+    test_submissions = temp_path / "submissions"
+    test_submissions.mkdir(parents=True, exist_ok=True)
     db_file = temp_path / "test.db"
     db_url = f"sqlite:///{db_file.as_posix()}"
 
@@ -51,13 +53,23 @@ def test_env(tmp_path, monkeypatch):
     # Create tables
     Base.metadata.create_all(bind=engine)
 
-    # Patch config STORAGE_DIR for routers
+    # Patch config directories for routers and scripts
     import backend.app.config as app_config
     import backend.app.main as app_main
     import backend.app.routers.resources as res_router
+    import backend.app.routers.submissions as sub_router
+    import backend.scripts.review_submissions as review_script
     import backend.scripts.seed as seed_script
+    monkeypatch.setattr(app_config, "STORAGE_BACKEND", "local")
     monkeypatch.setattr(app_config, "STORAGE_DIR", test_storage)
+    monkeypatch.setattr(app_config, "SUBMISSIONS_DIR", test_submissions)
+    monkeypatch.setattr(res_router, "STORAGE_BACKEND", "local")
     monkeypatch.setattr(res_router, "STORAGE_DIR", test_storage)
+    monkeypatch.setattr(sub_router, "SUBMISSIONS_DIR", test_submissions)
+    sub_router._client_timestamps.clear()
+    monkeypatch.setattr(review_script, "STORAGE_DIR", test_storage)
+    monkeypatch.setattr(review_script, "SUBMISSIONS_DIR", test_submissions)
+    monkeypatch.setattr(review_script, "SessionLocal", TestingSessionLocal)
     monkeypatch.setattr(seed_script, "STORAGE_DIR", test_storage)
     monkeypatch.setattr(seed_script, "SessionLocal", TestingSessionLocal)
     monkeypatch.setattr(app_main, "init_db", lambda: Base.metadata.create_all(bind=engine))
@@ -66,6 +78,7 @@ def test_env(tmp_path, monkeypatch):
         "engine": engine,
         "SessionLocal": TestingSessionLocal,
         "storage_dir": test_storage,
+        "submissions_dir": test_submissions,
     }
 
     # Teardown
